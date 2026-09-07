@@ -45,6 +45,9 @@
   .page-head h2{font-size:20px;font-weight:600;}
   .page-head p{color:var(--ink-muted);font-size:13px;margin-top:4px;max-width:74ch;}
 
+  .filtro-row{margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+  .filtro-row label{font-size:12px;color:var(--ink-muted);}
+
   .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
   .grid.cols-3{grid-template-columns:repeat(3,1fr);}
   .grid.cols-2{grid-template-columns:repeat(2,1fr);}
@@ -95,6 +98,13 @@
   .miniprog{width:70px;height:8px;background:var(--line);position:relative;display:inline-block;vertical-align:middle;margin-right:6px;}
   .miniprog .fill{position:absolute;left:0;top:0;height:100%;background:var(--sage);}
 
+  .heatgrid table{border-collapse:separate;border-spacing:3px;}
+  .heatgrid th{font-family:'IBM Plex Mono',monospace;font-size:9.5px;font-weight:500;color:var(--ink-muted);border-bottom:none;padding:2px;text-align:center;}
+  td.day{padding:0;border:none;text-align:center;}
+  .box{width:14px;height:14px;display:inline-block;}
+  .box.ok{background:var(--sage);}
+  .box.miss{background:var(--panel);border:1px solid var(--ember);}
+
   #loading, #errorbox{max-width:1180px;margin:60px auto;padding:0 20px;text-align:center;color:var(--ink-muted);font-family:'IBM Plex Mono',monospace;font-size:13px;}
   #errorbox{color:var(--ember);display:none;}
 
@@ -119,6 +129,7 @@
       <button data-page="p3"><span class="n">03</span>Gasto</button>
       <button data-page="p4"><span class="n">04</span>Nómina</button>
       <button data-page="p5"><span class="n">05</span>PPTO vs Real</button>
+      <button data-page="p6"><span class="n">06</span>Captura diaria</button>
     </nav>
   </div>
 </div>
@@ -129,6 +140,7 @@
   <section id="p3" class="sheet"></section>
   <section id="p4" class="sheet"></section>
   <section id="p5" class="sheet"></section>
+  <section id="p6" class="sheet"></section>
 </main>
 
 <footer>Datos en vivo desde Google Sheets vía Apps Script · el respaldo se recalcula cada ~30 min · este documento no sustituye la revisión con el equipo de obra antes de decisiones de financiamiento.</footer>
@@ -196,6 +208,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.body.addEventListener('change', (e) => {
     if(e.target.id === 'filtroObraConceptos') renderConceptosTabla(e.target.value);
+    if(e.target.id === 'filtroObraResumen') renderResumen(e.target.value);
+    if(e.target.id === 'filtroObraGasto') renderGasto(e.target.value);
   });
 });
 
@@ -207,52 +221,83 @@ function renderTodo(){
   renderGasto();
   renderNomina();
   renderConceptosPagina();
+  renderCapturaDiaria();
 }
 
 // ============ 01 RESUMEN ============
-function renderResumen(){
+function renderResumen(obraId){
+  obraId = obraId || '';
   const obras = DATA.obras || [];
   const r = DATA.resumen || {};
-  const activas = obras.filter(o => o.estado === 'ACTIVA');
-  const margenNeg = obras.filter(o => o.margen_contrato < 0);
-  const sobrefacturadas = obras.filter(o => o.pct_facturado_contrato != null && o.pct_facturado_contrato > 1);
 
-  let html = `
+  const opciones = ['<option value="">Todo el portafolio</option>']
+    .concat(obras.map(o=>`<option value="${esc(o.id_obra)}" ${o.id_obra===obraId?'selected':''}>${esc(o.nombre_obra)}</option>`))
+    .join('');
+
+  let bodyHtml;
+  if(!obraId){
+    const activas = obras.filter(o => o.estado === 'ACTIVA');
+    const margenNeg = obras.filter(o => o.margen_contrato < 0);
+    const sobrefacturadas = obras.filter(o => o.pct_facturado_contrato != null && o.pct_facturado_contrato > 1);
+    bodyHtml = `
+      <div class="grid">
+        <div class="panel kpi"><div class="label">Monto contratado (portafolio)</div><div class="value">${fmtMoney.format(r.monto_contrato_total||0)}</div><div class="note">${obras.length} obras registradas, ${activas.length} activas.</div></div>
+        <div class="panel kpi"><div class="label">Compra real acumulada</div><div class="value">${fmtMoney.format(r.compra_real_total||0)}</div><div class="note">Material comprado, todo el portafolio.</div></div>
+        <div class="panel kpi"><div class="label">Facturado real acumulado</div><div class="value">${fmtMoney.format(r.facturado_real_total||0)}</div><div class="note">${fmtPct((r.facturado_real_total||0)/(r.monto_contrato_total||1))} del monto contratado.</div></div>
+        <div class="panel kpi"><div class="label">Margen a contrato (portafolio)</div><div class="value">${fmtMoney.format(r.margen_contrato_total||0)}</div><div class="note">Monto Total Contrato − Compra real − Nómina prorrateada.</div></div>
+      </div>
+      <div class="grid cols-2" style="margin-top:11px;">
+        <div class="panel kpi"><div class="label">Obras con margen a contrato negativo</div><div class="value">${margenNeg.length}</div><div class="note">${margenNeg.map(o=>esc(o.nombre_obra)).join(', ') || 'ninguna'}</div>${margenNeg.length? '<span class="tag alerta">revisar</span>':'<span class="tag ok">sin alerta</span>'}</div>
+        <div class="panel kpi"><div class="label">Obras facturadas sobre el 100% del contrato</div><div class="value">${sobrefacturadas.length}</div><div class="note">${sobrefacturadas.map(o=>esc(o.nombre_obra)).join(', ') || 'ninguna'}</div>${sobrefacturadas.length? '<span class="tag alerta">revisar</span>':'<span class="tag ok">sin alerta</span>'}</div>
+      </div>
+      <div class="panel span-4" style="margin-top:11px;">
+        <h3 class="panel-title">Margen a contrato, por obra</h3>
+        <div class="panel-sub">Monto Total Contrato − Compra real − Nómina prorrateada. Verde = margen positivo, rojo = obra que ya cuesta más de lo que vale su contrato completo.</div>
+        <div id="chartMargen"></div>
+      </div>
+      <div class="callout">La mayoría de las obras del portafolio son de reciente arranque y todavía no tienen avances capturados en <span class="mono">3_Avances_Diarios</span> — por eso el avance devengado no aparece de forma general todavía; se irá poblando obra por obra conforme haya captura.</div>
+    `;
+  } else {
+    const o = obras.find(x=>x.id_obra===obraId);
+    if(!o){ bodyHtml = '<div class="panel">No se encontró esa obra.</div>'; }
+    else {
+      bodyHtml = `
+        <div class="grid">
+          <div class="panel kpi"><div class="label">Monto contratado</div><div class="value">${fmtMoney.format(o.monto_contrato)}</div><div class="note">${esc(o.cliente)} · OT ${esc(o.ot)} · ${esc(o.estado)}</div></div>
+          <div class="panel kpi"><div class="label">Compra real</div><div class="value">${fmtMoney.format(o.compra_real)}</div></div>
+          <div class="panel kpi"><div class="label">Facturado real</div><div class="value">${fmtMoney.format(o.facturado_real)}</div><div class="note">${fmtPct(o.pct_facturado_contrato)} del contrato.</div></div>
+          <div class="panel kpi"><div class="label">Nómina prorrateada acumulada</div><div class="value">${fmtMoney.format(o.nomina_prorrateada_acumulada)}</div></div>
+        </div>
+        <div class="grid cols-2" style="margin-top:11px;">
+          <div class="panel kpi"><div class="label">Margen a contrato</div><div class="value">${fmtMoney.format(o.margen_contrato)}</div>${o.margen_contrato<0?'<span class="tag alerta">revisar</span>':'<span class="tag ok">sin alerta</span>'}</div>
+          <div class="panel kpi"><div class="label">Avance devengado</div><div class="value">${o.ingreso_devengado>0?fmtMoney.format(o.ingreso_devengado):'—'}</div><div class="note">${o.ingreso_devengado>0? 'Margen devengado: '+fmtMoney.format(o.margen_devengado) : 'Sin avances capturados todavía en esta obra.'}</div></div>
+        </div>
+      `;
+    }
+  }
+
+  document.getElementById('p1').innerHTML = `
     <div class="page-head">
       <h2>Resumen ejecutivo del portafolio</h2>
       <p>Lectura de 30 segundos, con datos en vivo de Compras, Ventas, Nómina y Obras.</p>
     </div>
-    <div class="grid">
-      <div class="panel kpi"><div class="label">Monto contratado (portafolio)</div><div class="value">${fmtMoney.format(r.monto_contrato_total||0)}</div><div class="note">${obras.length} obras registradas, ${activas.length} activas.</div></div>
-      <div class="panel kpi"><div class="label">Compra real acumulada</div><div class="value">${fmtMoney.format(r.compra_real_total||0)}</div><div class="note">Material comprado, todo el portafolio.</div></div>
-      <div class="panel kpi"><div class="label">Facturado real acumulado</div><div class="value">${fmtMoney.format(r.facturado_real_total||0)}</div><div class="note">${fmtPct((r.facturado_real_total||0)/(r.monto_contrato_total||1))} del monto contratado.</div></div>
-      <div class="panel kpi"><div class="label">Margen a contrato (portafolio)</div><div class="value">${fmtMoney.format(r.margen_contrato_total||0)}</div><div class="note">Monto Total Contrato − Compra real − Nómina prorrateada.</div></div>
-    </div>
-    <div class="grid cols-2" style="margin-top:11px;">
-      <div class="panel kpi"><div class="label">Obras con margen a contrato negativo</div><div class="value">${margenNeg.length}</div><div class="note">${margenNeg.map(o=>esc(o.nombre_obra)).join(', ') || 'ninguna'}</div>${margenNeg.length? '<span class="tag alerta">revisar</span>':'<span class="tag ok">sin alerta</span>'}</div>
-      <div class="panel kpi"><div class="label">Obras facturadas sobre el 100% del contrato</div><div class="value">${sobrefacturadas.length}</div><div class="note">${sobrefacturadas.map(o=>esc(o.nombre_obra)).join(', ') || 'ninguna'}</div>${sobrefacturadas.length? '<span class="tag alerta">revisar</span>':'<span class="tag ok">sin alerta</span>'}</div>
-    </div>
-    <div class="panel span-4" style="margin-top:11px;">
-      <h3 class="panel-title">Margen a contrato, por obra</h3>
-      <div class="panel-sub">Monto Total Contrato − Compra real − Nómina prorrateada. Verde = margen positivo, rojo = obra que ya cuesta más de lo que vale su contrato completo.</div>
-      <div id="chartMargen"></div>
-    </div>
-    <div class="callout">La mayoría de las obras del portafolio son de reciente arranque y todavía no tienen avances capturados en <span class="mono">3_Avances_Diarios</span> — por eso el "margen devengado" (basado en avance real) no aparece de forma general todavía; se irá poblando obra por obra en la pestaña de Rentabilidad conforme haya captura.</div>
+    <div class="filtro-row"><label>Ver: </label><select id="filtroObraResumen">${opciones}</select></div>
+    ${bodyHtml}
   `;
-  document.getElementById('p1').innerHTML = html;
 
-  // gráfica divergente
-  const maxAbs = Math.max(1, ...obras.map(o => Math.abs(o.margen_contrato||0)));
-  const ordenado = [...obras].sort((a,b)=> (a.margen_contrato||0)-(b.margen_contrato||0));
-  const chart = document.getElementById('chartMargen');
-  chart.innerHTML = ordenado.map(o=>{
-    const v = o.margen_contrato||0;
-    const pctWidth = Math.min(50, Math.abs(v)/maxAbs*50);
-    const barHtml = v>=0
-      ? `<div class="bar pos" style="width:${pctWidth}%;"></div>`
-      : `<div class="bar neg" style="width:${pctWidth}%;"></div>`;
-    return `<div class="divrow"><div class="lbl">${esc(o.nombre_obra)}</div><div class="divtrack"><div class="zero"></div>${barHtml}</div><div class="val">${fmtMoney.format(v)}</div></div>`;
-  }).join('');
+  if(!obraId){
+    const maxAbs = Math.max(1, ...obras.map(o => Math.abs(o.margen_contrato||0)));
+    const ordenado = [...obras].sort((a,b)=> (a.margen_contrato||0)-(b.margen_contrato||0));
+    const chart = document.getElementById('chartMargen');
+    chart.innerHTML = ordenado.map(o=>{
+      const v = o.margen_contrato||0;
+      const pctWidth = Math.min(50, Math.abs(v)/maxAbs*50);
+      const barHtml = v>=0
+        ? `<div class="bar pos" style="width:${pctWidth}%;"></div>`
+        : `<div class="bar neg" style="width:${pctWidth}%;"></div>`;
+      return `<div class="divrow"><div class="lbl">${esc(o.nombre_obra)}</div><div class="divtrack"><div class="zero"></div>${barHtml}</div><div class="val">${fmtMoney.format(v)}</div></div>`;
+    }).join('');
+  }
 }
 
 // ============ 02 RENTABILIDAD ============
@@ -260,9 +305,6 @@ function renderRentabilidad(){
   const obras = [...(DATA.obras||[])].sort((a,b)=>(a.margen_contrato||0)-(b.margen_contrato||0));
   let filas = obras.map(o=>{
     const alerta = o.margen_contrato < 0;
-    const devengadoTxt = (o.ingreso_devengado>0)
-      ? fmtMoney.format(o.margen_devengado)
-      : '<span style="color:var(--ink-muted);">sin avances capturados</span>';
     const posTxt = (o.ingreso_devengado>0 && o.posicion_facturacion!=null)
       ? fmtPct(o.posicion_facturacion)
       : '—';
@@ -272,7 +314,7 @@ function renderRentabilidad(){
       <td class="num">${fmtMoney.format(o.compra_real)}</td>
       <td class="num">${fmtPct(o.pct_facturado_contrato)}</td>
       <td class="num">${fmtMoney.format(o.margen_contrato)}</td>
-      <td class="num">${devengadoTxt}</td>
+      <td class="num">${fmtMoney.format(o.nomina_prorrateada_acumulada)}</td>
       <td class="num">${posTxt}</td>
       <td>${o.estado}</td>
     </tr>`;
@@ -285,36 +327,96 @@ function renderRentabilidad(){
     </div>
     <div class="panel span-4">
       <div class="tablewrap"><table>
-        <thead><tr><th>Obra</th><th>Contrato</th><th>Compra real</th><th>% Facturado</th><th>Margen a contrato</th><th>Margen devengado</th><th>Posición facturación</th><th>Estado</th></tr></thead>
+        <thead><tr><th>Obra</th><th>Contrato</th><th>Compra real</th><th>% Facturado</th><th>Margen a contrato</th><th>Nómina prorrateada</th><th>Posición facturación</th><th>Estado</th></tr></thead>
         <tbody>${filas}</tbody>
       </table></div>
-      <div class="callout">"Posición de facturación" = % Facturado − % Avance devengado. Positivo: facturaste por encima de lo ejecutado (riesgo si el cliente audita). Negativo: ya ejecutaste más de lo que has facturado. Sólo se calcula si la obra ya tiene avances capturados.</div>
+      <div class="callout">
+        <b>Nómina prorrateada</b>: lo que le toca a esta obra de la nómina total de la empresa, mes con mes, a prorrata de su Monto Total Contrato entre las obras activas ese mes — es exactamente lo que ya se resta en "Margen a contrato".<br><br>
+        <b>Posición de facturación</b> compara qué tanto has facturado contra qué tanto has ejecutado, ambos como % del contrato. Ejemplo: 60% facturado contra 40% de avance devengado da +20% — facturaste por delante de tu propio avance (riesgo si el cliente audita contra obra ejecutada). Si fuera −20%, ya ejecutaste más de lo que has cobrado. Sale "—" en casi todas las obras porque casi ninguna tiene avances capturados en 3_Avances_Diarios todavía; se va llenando con la captura.
+      </div>
     </div>
   `;
 }
 
 // ============ 03 DETALLE DE GASTO ============
-function renderGasto(){
-  const cats = [...(DATA.gasto_por_categoria||[])].sort((a,b)=>b.monto-a.monto);
-  const max = Math.max(1, ...cats.map(c=>c.monto));
+function agruparSuma_(arr, keyField){
+  const m = new Map();
+  arr.forEach(item=>{
+    const k = item[keyField];
+    m.set(k, (m.get(k)||0) + (item.monto||0));
+  });
+  return [...m.entries()].map(([k,monto])=>({ [keyField]: k, monto }));
+}
+
+function renderGasto(obraId){
+  obraId = obraId || '';
+  const rowsCat = DATA.gasto_por_categoria || [];
+  const rowsProv = DATA.gasto_por_proveedor || [];
+  const rowsSC = DATA.gasto_sin_clasificar || [];
+
+  const obrasConGasto = [...new Map(rowsCat.filter(r=>r.id_obra).map(c=>[c.id_obra, c.nombre_obra])).entries()];
+  const opciones = ['<option value="">Todo el portafolio</option>']
+    .concat(obrasConGasto.map(([id,nombre])=>`<option value="${esc(id)}" ${id===obraId?'selected':''}>${esc(nombre)}</option>`))
+    .join('');
+
+  let cats, provs, sc;
+  if(obraId){
+    cats = rowsCat.filter(r=>r.id_obra===obraId);
+    provs = rowsProv.filter(r=>r.id_obra===obraId);
+    sc = rowsSC.filter(r=>r.id_obra===obraId);
+  } else {
+    cats = agruparSuma_(rowsCat, 'categoria');
+    provs = agruparSuma_(rowsProv, 'proveedor');
+    sc = rowsSC;
+  }
+  cats.sort((a,b)=>b.monto-a.monto);
+  provs.sort((a,b)=>b.monto-a.monto);
+  sc = [...sc].sort((a,b)=>b.monto-a.monto);
+
   const total = cats.reduce((s,c)=>s+c.monto,0);
-  const filas = cats.map(c=>`
-    <div class="row"><div class="lbl">${esc(c.categoria)}</div><div class="track"><div class="fill" style="width:${(c.monto/max*100).toFixed(1)}%"></div></div><div class="val">${fmtMoney.format(c.monto)}</div></div>
+  const maxCat = Math.max(1, ...cats.map(c=>c.monto));
+  const filasCat = cats.map(c=>`
+    <div class="row"><div class="lbl">${esc(c.categoria)}</div><div class="track"><div class="fill" style="width:${(c.monto/maxCat*100).toFixed(1)}%"></div></div><div class="val">${fmtMoney.format(c.monto)}</div></div>
   `).join('');
+
+  const maxProv = Math.max(1, ...provs.map(p=>p.monto));
+  const filasProv = provs.map(p=>`
+    <div class="row"><div class="lbl">${esc(p.proveedor)}</div><div class="track"><div class="fill" style="width:${(p.monto/maxProv*100).toFixed(1)}%"></div></div><div class="val">${fmtMoney.format(p.monto)}</div></div>
+  `).join('');
+
+  const filasSC = sc.map(s=>`
+    <tr><td>${esc(s.nombre_obra||'')}</td><td>${esc(s.codigo_producto)}</td><td>${esc(s.nombre_producto)}</td><td class="num">${s.unidades}</td><td class="num">${fmtMoney.format(s.monto)}</td></tr>
+  `).join('');
+  const totalSC = sc.reduce((s,x)=>s+x.monto,0);
 
   document.getElementById('p3').innerHTML = `
     <div class="page-head">
       <h2>Detalle de gasto en materiales</h2>
-      <p>En qué se está gastando el dinero de compras, por categoría de producto (según CAT_PROD).</p>
+      <p>En qué se está gastando el dinero de compras: por categoría de producto y por proveedor.</p>
     </div>
+    <div class="filtro-row"><label>Obra: </label><select id="filtroObraGasto">${opciones}</select></div>
     <div class="grid cols-2">
-      <div class="panel kpi"><div class="label">Gasto total en material</div><div class="value">${fmtMoney.format(total)}</div><div class="note">${cats.length} categorías distintas registradas en compras.</div></div>
-      <div class="panel kpi"><div class="label">Categoría con mayor peso</div><div class="value">${cats[0]?esc(cats[0].categoria):'—'}</div><div class="note">${cats[0]?fmtMoney.format(cats[0].monto)+' · '+fmtPct(cats[0].monto/total):''}</div></div>
+      <div class="panel kpi"><div class="label">Gasto total en material</div><div class="value">${fmtMoney.format(total)}</div><div class="note">${cats.length} categorías distintas.</div></div>
+      <div class="panel kpi"><div class="label">Categoría con mayor peso</div><div class="value">${cats[0]?esc(cats[0].categoria):'—'}</div><div class="note">${cats[0]?fmtMoney.format(cats[0].monto)+' · '+fmtPct(cats[0].monto/(total||1)):''}</div></div>
+    </div>
+    <div class="grid cols-2" style="margin-top:11px;">
+      <div class="panel">
+        <h3 class="panel-title">Gasto por categoría de material</h3>
+        <div class="panel-sub">Según la clasificación de CAT_PROD, por código de producto.</div>
+        <div class="barlist">${filasCat || '<div class="panel-sub">Sin compras registradas para esta selección.</div>'}</div>
+      </div>
+      <div class="panel">
+        <h3 class="panel-title">Compras por proveedor</h3>
+        <div class="barlist">${filasProv || '<div class="panel-sub">Sin compras registradas para esta selección.</div>'}</div>
+      </div>
     </div>
     <div class="panel span-4" style="margin-top:11px;">
-      <h3 class="panel-title">Gasto por categoría de material</h3>
-      <div class="barlist">${filas}</div>
-      <div class="callout">Esto es sólo material (Compras). El gasto operativo (subcontratos, fletes, renta de equipo, viáticos) todavía no tiene una cuenta contable mapeada a rubro de obra — pendiente del lado de Compaq, no de este tablero.</div>
+      <h3 class="panel-title">Detalle de "Sin clasificar" (${fmtMoney.format(totalSC)})</h3>
+      <div class="panel-sub">"Sin clasificar" = compras cuyo Código Producto no aparece todavía en tu hoja CAT_PROD. Agrega estos códigos ahí (con su Clasificación Producto 1) para que dejen de salir aquí.</div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Obra</th><th>Código</th><th>Producto</th><th>Unidades</th><th>Monto</th></tr></thead>
+        <tbody>${filasSC || '<tr><td colspan="5">Nada sin clasificar en esta selección — buen trabajo.</td></tr>'}</tbody>
+      </table></div>
     </div>
   `;
 }
@@ -322,7 +424,7 @@ function renderGasto(){
 // ============ 04 NÓMINA ============
 function renderNomina(){
   const meses = [...(DATA.nomina_por_mes||[])].sort((a,b)=> a.mes<b.mes?1:-1);
-  const filasMeses = meses.map(m=>`<tr><td>${m.mes}</td><td class="num">${fmtMoney.format(m.nomina_total)}</td><td class="num">${m.obras_activas}</td></tr>`).join('');
+  const filasMeses = meses.map(m=>`<tr class="${m.baja_confianza?'alerta':''}"><td>${m.mes}</td><td class="num">${fmtMoney.format(m.nomina_total)}</td><td class="num">${m.obras_activas}</td><td>${m.baja_confianza?'⚠ pocas obras activas — revisar':''}</td></tr>`).join('');
   const ultimo = meses[0];
   const filasDetalle = ultimo ? ultimo.detalle.map(d=>`<tr><td>${esc(d.nombre_obra)}</td><td class="num">${fmtMoney.format(d.monto_prorrateado)}</td></tr>`).join('') : '';
 
@@ -334,7 +436,8 @@ function renderNomina(){
     <div class="grid cols-2">
       <div class="panel">
         <h3 class="panel-title">Nómina total por mes</h3>
-        <div class="tablewrap"><table><thead><tr><th>Mes</th><th>Nómina total</th><th>Obras activas</th></tr></thead><tbody>${filasMeses}</tbody></table></div>
+        <div class="tablewrap"><table><thead><tr><th>Mes</th><th>Nómina total</th><th>Obras activas</th><th></th></tr></thead><tbody>${filasMeses}</tbody></table></div>
+        <div class="callout">Meses marcados en rojo tuvieron 2 obras activas o menos según fechas — si esos meses son anteriores a que 1_Obras tuviera el roster completo, su prorrateo probablemente está inflado en las pocas obras que sí aparecen.</div>
       </div>
       <div class="panel">
         <h3 class="panel-title">Prorrateo del mes más reciente${ultimo? ' ('+ultimo.mes+')':''}</h3>
@@ -353,12 +456,12 @@ function renderConceptosPagina(){
   document.getElementById('p5').innerHTML = `
     <div class="page-head">
       <h2>PPTO vs. Real por concepto</h2>
-      <p>Cantidad contratada contra cantidad ejecutada, concepto por concepto — el avance físico real de la obra.</p>
+      <p>Cantidad contratada contra cantidad ejecutada, costo real y margen devengado — concepto por concepto.</p>
     </div>
     <div class="panel span-4">
-      <label style="font-size:12px;color:var(--ink-muted);">Obra: </label>
-      <select id="filtroObraConceptos">${opciones}</select>
-      <div id="tablaConceptos" style="margin-top:12px;"></div>
+      <div class="filtro-row"><label>Obra: </label><select id="filtroObraConceptos">${opciones}</select></div>
+      <div id="tablaConceptos"></div>
+      <div class="callout">"Costo real" y "Margen devengado" salen de cruzar el material que se usó en cada avance (columna Descripcion Material de 3_Avances_Diarios) contra lo comprado de ese material en esa misma obra. Si un concepto no tiene ningún avance capturado todavía, estas columnas quedan en blanco — no en cero, para no confundir "sin dato" con "sin costo".</div>
     </div>
   `;
   if(obrasUnicas.length) renderConceptosTabla(obrasUnicas[0][0]);
@@ -368,6 +471,11 @@ function renderConceptosTabla(idObra){
   const conceptos = (DATA.conceptos||[]).filter(c=>c.id_obra===idObra);
   const filas = conceptos.map(c=>{
     const pct = c.pct_avance==null?0:c.pct_avance;
+    const costoTxt = c.costo_real_concepto==null ? '—' : fmtMoney.format(c.costo_real_concepto);
+    const margenTxt = c.margen_devengado_concepto==null ? '—' : fmtMoney.format(c.margen_devengado_concepto);
+    const materialesTxt = (c.materiales_cargados||[]).length
+      ? c.materiales_cargados.map(m=>`${esc(m.material)} (${m.unidades} ${esc(c.unidad)} · ${fmtMoney.format(m.monto_costo)})`).join('; ')
+      : '<span style="color:var(--ink-muted);">sin material ligado</span>';
     return `<tr>
       <td>${esc(c.clave)}</td>
       <td>${esc(c.descripcion)}</td>
@@ -377,13 +485,53 @@ function renderConceptosTabla(idObra){
       <td><span class="miniprog"><span class="fill" style="width:${Math.min(100,pct*100)}%"></span></span>${fmtPct(c.pct_avance)}</td>
       <td class="num">${fmtMoney.format(c.monto_contrato_concepto)}</td>
       <td class="num">${fmtMoney.format(c.monto_devengado_concepto)}</td>
+      <td class="num">${costoTxt}</td>
+      <td class="num">${margenTxt}</td>
+      <td style="max-width:240px;font-size:11px;">${materialesTxt}</td>
     </tr>`;
   }).join('');
   document.getElementById('tablaConceptos').innerHTML = `
     <div class="tablewrap"><table>
-      <thead><tr><th>Clave</th><th>Descripción</th><th>Unidad</th><th>Cant. contratada</th><th>Cant. ejecutada</th><th>% Avance</th><th>Monto contrato</th><th>Monto devengado</th></tr></thead>
+      <thead><tr><th>Clave</th><th>Descripción</th><th>Unidad</th><th>Cant. contratada</th><th>Cant. ejecutada</th><th>% Avance</th><th>Monto contrato</th><th>Monto devengado</th><th>Costo real</th><th>Margen devengado</th><th>Materiales cargados</th></tr></thead>
       <tbody>${filas}</tbody>
     </table></div>
+  `;
+}
+
+// ============ 06 CAPTURA DIARIA ============
+function renderCapturaDiaria(){
+  const cd = DATA.captura_diaria || {dias:[], obras:[]};
+  const hoy = new Date().toISOString().slice(0,10);
+  const sinReporteHoy = cd.obras.filter(o=>!(o.dias_con_reporte||[]).includes(hoy));
+
+  const headerDias = cd.dias.map(d=>`<th>${d.slice(8,10)}</th>`).join('');
+  const filas = cd.obras.map(o=>{
+    const set = new Set(o.dias_con_reporte||[]);
+    const celdas = cd.dias.map(d=>{
+      const ok = set.has(d);
+      return `<td class="day"><span class="box ${ok?'ok':'miss'}" title="${d}${ok?' — con reporte':' — sin reporte'}"></span></td>`;
+    }).join('');
+    return `<tr><td>${esc(o.nombre_obra)}</td><td>${esc(o.residente||'—')}</td>${celdas}</tr>`;
+  }).join('');
+
+  document.getElementById('p6').innerHTML = `
+    <div class="page-head">
+      <h2>Captura diaria por residente</h2>
+      <p>Un cuadro verde significa que ese día se registró al menos un avance en 3_Avances_Diarios para esa obra. Últimos ${cd.dias.length} días, solo obras ACTIVA.</p>
+    </div>
+    <div class="grid cols-2">
+      <div class="panel kpi"><div class="label">Obras sin reporte hoy</div><div class="value">${sinReporteHoy.length} de ${cd.obras.length}</div><div class="note">${sinReporteHoy.map(o=>esc(o.nombre_obra)).join(', ')||'todas reportaron hoy'}</div></div>
+    </div>
+    <div class="panel span-4 heatgrid" style="margin-top:11px;">
+      <div class="tablewrap"><table>
+        <thead><tr><th style="text-align:left;">Obra</th><th style="text-align:left;">Residente</th>${headerDias}</tr></thead>
+        <tbody>${filas || '<tr><td colspan="2">Sin obras activas.</td></tr>'}</tbody>
+      </table></div>
+      <div style="margin-top:10px;display:flex;gap:14px;font-size:11px;color:var(--ink-muted);align-items:center;">
+        <span><span class="box ok" style="vertical-align:middle;"></span> con reporte</span>
+        <span><span class="box miss" style="vertical-align:middle;"></span> sin reporte</span>
+      </div>
+    </div>
   `;
 }
 </script>
