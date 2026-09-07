@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tablero Ejecutivo de Obras — AsperNova</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F1F4F3; --panel:#FFFFFF; --ink:#16232B; --ink-muted:#5C6B72;
+    --line:#CBD4D2; --line-strong:#8CA0A0;
+    --steel:#2C5F7C; --steel-soft:#DCE6EA;
+    --sage:#3F7864; --sage-soft:#E1EDE7;
+    --ember:#B3492D; --ember-soft:#F4E1DB;
+    --amber:#B98A2E; --amber-soft:#F2E9D6;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);}
+  body{font-family:'IBM Plex Sans',sans-serif;font-size:14px;line-height:1.5;}
+  h1,h2,h3{font-family:'Space Grotesk',sans-serif;margin:0;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+
+  .topbar{position:sticky;top:0;z-index:20;background:var(--paper);border-bottom:1px solid var(--line-strong);}
+  .topbar-inner{max-width:1180px;margin:0 auto;padding:14px 20px 0;}
+  .brand{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px 16px;}
+  .brand h1{font-size:19px;font-weight:600;}
+  .brand .sub{color:var(--ink-muted);font-size:12px;display:flex;align-items:center;gap:10px;}
+  #refreshBtn{font-family:'IBM Plex Mono',monospace;font-size:11px;border:1px solid var(--line-strong);background:var(--panel);padding:3px 9px;cursor:pointer;color:var(--steel);}
+  #refreshBtn:hover{background:var(--steel-soft);}
+  nav.sheets{display:flex;gap:2px;overflow-x:auto;margin-top:12px;}
+  nav.sheets button{
+    font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;color:var(--ink-muted);
+    background:transparent;border:1px solid var(--line);border-bottom:none;padding:9px 16px;
+    cursor:pointer;white-space:nowrap;border-radius:3px 3px 0 0;position:relative;top:1px;
+  }
+  nav.sheets button .n{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--line-strong);margin-right:7px;}
+  nav.sheets button.active{color:var(--ink);background:var(--panel);border-color:var(--line-strong);border-bottom:1px solid var(--panel);}
+
+  main{max-width:1180px;margin:0 auto;padding:18px 20px 60px;}
+  .sheet{display:none;}
+  .sheet.active{display:block;}
+  .page-head{margin-bottom:14px;}
+  .page-head h2{font-size:20px;font-weight:600;}
+  .page-head p{color:var(--ink-muted);font-size:13px;margin-top:4px;max-width:74ch;}
+
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+  .grid.cols-3{grid-template-columns:repeat(3,1fr);}
+  .grid.cols-2{grid-template-columns:repeat(2,1fr);}
+  @media(max-width:880px){.grid,.grid.cols-3,.grid.cols-2{grid-template-columns:repeat(2,1fr);}}
+  @media(max-width:560px){.grid,.grid.cols-3,.grid.cols-2{grid-template-columns:1fr;}}
+
+  .panel{background:var(--panel);border:1px solid var(--line-strong);padding:14px 16px;}
+  .panel.span-2{grid-column:span 2;}
+  .panel.span-4{grid-column:1/-1;}
+
+  .kpi .label{font-size:11.5px;color:var(--ink-muted);}
+  .kpi .value{font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:600;margin-top:4px;}
+  .kpi .note{font-size:11.5px;color:var(--ink-muted);margin-top:6px;line-height:1.4;}
+  .tag{display:inline-block;font-size:10px;font-family:'IBM Plex Mono',monospace;border:1px solid;padding:1px 6px;margin-top:8px;}
+  .tag.alerta{color:var(--ember);border-color:var(--ember);background:var(--ember-soft);}
+  .tag.ok{color:var(--sage);border-color:var(--sage);background:var(--sage-soft);}
+
+  h3.panel-title{font-size:13.5px;font-weight:600;margin-bottom:2px;}
+  .panel-sub{font-size:11.5px;color:var(--ink-muted);margin-bottom:10px;}
+
+  table{width:100%;border-collapse:collapse;font-size:12px;}
+  th,td{text-align:left;padding:6px 7px;border-bottom:1px solid var(--line);}
+  th{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:11px;color:var(--ink-muted);border-bottom:1px solid var(--line-strong);cursor:default;}
+  td.num{font-family:'IBM Plex Mono',monospace;text-align:right;white-space:nowrap;}
+  tr.alerta td{background:var(--ember-soft);}
+  .tablewrap{overflow-x:auto;}
+
+  .callout{border-left:3px solid var(--amber);background:var(--amber-soft);padding:9px 12px;font-size:12px;margin-top:10px;}
+  .callout.ember{border-left-color:var(--ember);background:var(--ember-soft);}
+
+  .divrow{display:grid;grid-template-columns:200px 1fr 110px;align-items:center;gap:8px;margin-bottom:7px;}
+  .divrow .lbl{font-size:11.5px;}
+  .divtrack{position:relative;height:14px;background:var(--line);}
+  .divtrack .zero{position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--line-strong);}
+  .divtrack .bar{position:absolute;top:0;height:100%;}
+  .divtrack .bar.pos{background:var(--sage);left:50%;}
+  .divtrack .bar.neg{background:var(--ember);right:50%;}
+  .divrow .val{font-family:'IBM Plex Mono',monospace;font-size:11px;text-align:right;}
+
+  .barlist .row{display:grid;grid-template-columns:190px 1fr 100px;align-items:center;gap:8px;margin-bottom:7px;}
+  .barlist .lbl{font-size:11.5px;}
+  .barlist .track{background:var(--line);height:13px;position:relative;}
+  .barlist .fill{background:var(--steel);height:100%;}
+  .barlist .val{font-family:'IBM Plex Mono',monospace;font-size:11px;text-align:right;}
+
+  select, .selectbox{font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;border:1px solid var(--line-strong);padding:6px 10px;background:var(--panel);color:var(--ink);}
+
+  .miniprog{width:70px;height:8px;background:var(--line);position:relative;display:inline-block;vertical-align:middle;margin-right:6px;}
+  .miniprog .fill{position:absolute;left:0;top:0;height:100%;background:var(--sage);}
+
+  #loading, #errorbox{max-width:1180px;margin:60px auto;padding:0 20px;text-align:center;color:var(--ink-muted);font-family:'IBM Plex Mono',monospace;font-size:13px;}
+  #errorbox{color:var(--ember);display:none;}
+
+  footer{max-width:1180px;margin:0 auto;padding:20px 20px 40px;color:var(--ink-muted);font-size:11px;}
+</style>
+</head>
+<body>
+
+<div id="loading">Cargando datos en vivo del portafolio…</div>
+<div id="errorbox"></div>
+
+<div id="app" style="display:none;">
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <h1>Tablero Ejecutivo de Obras</h1>
+      <span class="sub">AsperNova · <span id="ultimaActualizacion">—</span> <button id="refreshBtn">↻ actualizar</button></span>
+    </div>
+    <nav class="sheets" id="nav">
+      <button data-page="p1" class="active"><span class="n">01</span>Resumen</button>
+      <button data-page="p2"><span class="n">02</span>Rentabilidad</button>
+      <button data-page="p3"><span class="n">03</span>Gasto</button>
+      <button data-page="p4"><span class="n">04</span>Nómina</button>
+      <button data-page="p5"><span class="n">05</span>PPTO vs Real</button>
+    </nav>
+  </div>
+</div>
+
+<main>
+  <section id="p1" class="sheet active"></section>
+  <section id="p2" class="sheet"></section>
+  <section id="p3" class="sheet"></section>
+  <section id="p4" class="sheet"></section>
+  <section id="p5" class="sheet"></section>
+</main>
+
+<footer>Datos en vivo desde Google Sheets vía Apps Script · el respaldo se recalcula cada ~30 min · este documento no sustituye la revisión con el equipo de obra antes de decisiones de financiamiento.</footer>
+</div>
+
+<script>
+// ============ CONFIG ============
+const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwD_qXXjYenWoe0DWpEG_EZbxOr5nunyy0yE0kgd14Yd7sGBPG_E_sfQVoDviUKZ4w/exec';
+
+const fmtMoney = new Intl.NumberFormat('es-MX', {style:'currency', currency:'MXN', maximumFractionDigits:0});
+const fmtPct = (x) => (x===null || x===undefined) ? '—' : (x*100).toFixed(1)+'%';
+const esc = (s) => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+let DATA = null;
+
+// ============ CARGA JSONP (evita problemas de CORS entre dominios) ============
+function cargarDatos(){
+  return new Promise((resolve, reject) => {
+    const cb = 'dashCB' + Date.now();
+    const script = document.createElement('script');
+    let done = false;
+    const to = setTimeout(() => { if(!done){ done=true; limpiar(); reject(new Error('Tiempo de espera agotado (15s). ¿El deployment sigue activo?')); } }, 15000);
+    function limpiar(){ clearTimeout(to); delete window[cb]; if(script.parentNode) script.parentNode.removeChild(script); }
+    window[cb] = (data) => { if(done) return; done=true; limpiar(); resolve(data); };
+    script.onerror = () => { if(done) return; done=true; limpiar(); reject(new Error('No se pudo cargar el endpoint (revisa que el deployment de Apps Script siga activo).')); };
+    script.src = ENDPOINT + (ENDPOINT.indexOf('?')>-1?'&':'?') + 'callback=' + cb;
+    document.body.appendChild(script);
+  });
+}
+
+async function iniciar(){
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('errorbox').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+  try{
+    DATA = await cargarDatos();
+    if(DATA.error){ throw new Error(DATA.error); }
+    renderTodo();
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+  }catch(err){
+    document.getElementById('loading').style.display = 'none';
+    const box = document.getElementById('errorbox');
+    box.style.display = 'block';
+    box.textContent = 'No se pudo cargar el tablero: ' + err.message;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  iniciar();
+  document.body.addEventListener('click', (e) => {
+    if(e.target.id === 'refreshBtn') iniciar();
+    const navBtn = e.target.closest('nav.sheets button');
+    if(navBtn){
+      document.querySelectorAll('nav.sheets button').forEach(b=>b.classList.remove('active'));
+      navBtn.classList.add('active');
+      const target = navBtn.getAttribute('data-page');
+      document.querySelectorAll('.sheet').forEach(s=>s.classList.toggle('active', s.id===target));
+      window.scrollTo({top:0, behavior:'smooth'});
+    }
+  });
+  document.body.addEventListener('change', (e) => {
+    if(e.target.id === 'filtroObraConceptos') renderConceptosTabla(e.target.value);
+  });
+});
+
+function renderTodo(){
+  const gen = new Date(DATA.generado);
+  document.getElementById('ultimaActualizacion').textContent = 'última actualización: ' + gen.toLocaleString('es-MX');
+  renderResumen();
+  renderRentabilidad();
+  renderGasto();
+  renderNomina();
+  renderConceptosPagina();
+}
+
+// ============ 01 RESUMEN ============
+function renderResumen(){
+  const obras = DATA.obras || [];
+  const r = DATA.resumen || {};
+  const activas = obras.filter(o => o.estado === 'ACTIVA');
+  const margenNeg = obras.filter(o => o.margen_contrato < 0);
+  const sobrefacturadas = obras.filter(o => o.pct_facturado_contrato != null && o.pct_facturado_contrato > 1);
+
+  let html = `
+    <div class="page-head">
+      <h2>Resumen ejecutivo del portafolio</h2>
+      <p>Lectura de 30 segundos, con datos en vivo de Compras, Ventas, Nómina y Obras.</p>
+    </div>
+    <div class="grid">
+      <div class="panel kpi"><div class="label">Monto contratado (portafolio)</div><div class="value">${fmtMoney.format(r.monto_contrato_total||0)}</div><div class="note">${obras.length} obras registradas, ${activas.length} activas.</div></div>
+      <div class="panel kpi"><div class="label">Compra real acumulada</div><div class="value">${fmtMoney.format(r.compra_real_total||0)}</div><div class="note">Material comprado, todo el portafolio.</div></div>
+      <div class="panel kpi"><div class="label">Facturado real acumulado</div><div class="value">${fmtMoney.format(r.facturado_real_total||0)}</div><div class="note">${fmtPct((r.facturado_real_total||0)/(r.monto_contrato_total||1))} del monto contratado.</div></div>
+      <div class="panel kpi"><div class="label">Margen a contrato (portafolio)</div><div class="value">${fmtMoney.format(r.margen_contrato_total||0)}</div><div class="note">Monto Total Contrato − Compra real − Nómina prorrateada.</div></div>
+    </div>
+    <div class="grid cols-2" style="margin-top:11px;">
+      <div class="panel kpi"><div class="label">Obras con margen a contrato negativo</div><div class="value">${margenNeg.length}</div><div class="note">${margenNeg.map(o=>esc(o.nombre_obra)).join(', ') || 'ninguna'}</div>${margenNeg.length? '<span class="tag alerta">revisar</span>':'<span class="tag ok">sin alerta</span>'}</div>
+      <div class="panel kpi"><div class="label">Obras facturadas sobre el 100% del contrato</div><div class="value">${sobrefacturadas.length}</div><div class="note">${sobrefacturadas.map(o=>esc(o.nombre_obra)).join(', ') || 'ninguna'}</div>${sobrefacturadas.length? '<span class="tag alerta">revisar</span>':'<span class="tag ok">sin alerta</span>'}</div>
+    </div>
+    <div class="panel span-4" style="margin-top:11px;">
+      <h3 class="panel-title">Margen a contrato, por obra</h3>
+      <div class="panel-sub">Monto Total Contrato − Compra real − Nómina prorrateada. Verde = margen positivo, rojo = obra que ya cuesta más de lo que vale su contrato completo.</div>
+      <div id="chartMargen"></div>
+    </div>
+    <div class="callout">La mayoría de las obras del portafolio son de reciente arranque y todavía no tienen avances capturados en <span class="mono">3_Avances_Diarios</span> — por eso el "margen devengado" (basado en avance real) no aparece de forma general todavía; se irá poblando obra por obra en la pestaña de Rentabilidad conforme haya captura.</div>
+  `;
+  document.getElementById('p1').innerHTML = html;
+
+  // gráfica divergente
+  const maxAbs = Math.max(1, ...obras.map(o => Math.abs(o.margen_contrato||0)));
+  const ordenado = [...obras].sort((a,b)=> (a.margen_contrato||0)-(b.margen_contrato||0));
+  const chart = document.getElementById('chartMargen');
+  chart.innerHTML = ordenado.map(o=>{
+    const v = o.margen_contrato||0;
+    const pctWidth = Math.min(50, Math.abs(v)/maxAbs*50);
+    const barHtml = v>=0
+      ? `<div class="bar pos" style="width:${pctWidth}%;"></div>`
+      : `<div class="bar neg" style="width:${pctWidth}%;"></div>`;
+    return `<div class="divrow"><div class="lbl">${esc(o.nombre_obra)}</div><div class="divtrack"><div class="zero"></div>${barHtml}</div><div class="val">${fmtMoney.format(v)}</div></div>`;
+  }).join('');
+}
+
+// ============ 02 RENTABILIDAD ============
+function renderRentabilidad(){
+  const obras = [...(DATA.obras||[])].sort((a,b)=>(a.margen_contrato||0)-(b.margen_contrato||0));
+  let filas = obras.map(o=>{
+    const alerta = o.margen_contrato < 0;
+    const devengadoTxt = (o.ingreso_devengado>0)
+      ? fmtMoney.format(o.margen_devengado)
+      : '<span style="color:var(--ink-muted);">sin avances capturados</span>';
+    const posTxt = (o.ingreso_devengado>0 && o.posicion_facturacion!=null)
+      ? fmtPct(o.posicion_facturacion)
+      : '—';
+    return `<tr class="${alerta?'alerta':''}">
+      <td>${esc(o.nombre_obra)}</td>
+      <td class="num">${fmtMoney.format(o.monto_contrato)}</td>
+      <td class="num">${fmtMoney.format(o.compra_real)}</td>
+      <td class="num">${fmtPct(o.pct_facturado_contrato)}</td>
+      <td class="num">${fmtMoney.format(o.margen_contrato)}</td>
+      <td class="num">${devengadoTxt}</td>
+      <td class="num">${posTxt}</td>
+      <td>${o.estado}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('p2').innerHTML = `
+    <div class="page-head">
+      <h2>Rentabilidad por obra</h2>
+      <p>Ordenado del margen más bajo al más alto, para que lo que necesita atención aparezca arriba.</p>
+    </div>
+    <div class="panel span-4">
+      <div class="tablewrap"><table>
+        <thead><tr><th>Obra</th><th>Contrato</th><th>Compra real</th><th>% Facturado</th><th>Margen a contrato</th><th>Margen devengado</th><th>Posición facturación</th><th>Estado</th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table></div>
+      <div class="callout">"Posición de facturación" = % Facturado − % Avance devengado. Positivo: facturaste por encima de lo ejecutado (riesgo si el cliente audita). Negativo: ya ejecutaste más de lo que has facturado. Sólo se calcula si la obra ya tiene avances capturados.</div>
+    </div>
+  `;
+}
+
+// ============ 03 DETALLE DE GASTO ============
+function renderGasto(){
+  const cats = [...(DATA.gasto_por_categoria||[])].sort((a,b)=>b.monto-a.monto);
+  const max = Math.max(1, ...cats.map(c=>c.monto));
+  const total = cats.reduce((s,c)=>s+c.monto,0);
+  const filas = cats.map(c=>`
+    <div class="row"><div class="lbl">${esc(c.categoria)}</div><div class="track"><div class="fill" style="width:${(c.monto/max*100).toFixed(1)}%"></div></div><div class="val">${fmtMoney.format(c.monto)}</div></div>
+  `).join('');
+
+  document.getElementById('p3').innerHTML = `
+    <div class="page-head">
+      <h2>Detalle de gasto en materiales</h2>
+      <p>En qué se está gastando el dinero de compras, por categoría de producto (según CAT_PROD).</p>
+    </div>
+    <div class="grid cols-2">
+      <div class="panel kpi"><div class="label">Gasto total en material</div><div class="value">${fmtMoney.format(total)}</div><div class="note">${cats.length} categorías distintas registradas en compras.</div></div>
+      <div class="panel kpi"><div class="label">Categoría con mayor peso</div><div class="value">${cats[0]?esc(cats[0].categoria):'—'}</div><div class="note">${cats[0]?fmtMoney.format(cats[0].monto)+' · '+fmtPct(cats[0].monto/total):''}</div></div>
+    </div>
+    <div class="panel span-4" style="margin-top:11px;">
+      <h3 class="panel-title">Gasto por categoría de material</h3>
+      <div class="barlist">${filas}</div>
+      <div class="callout">Esto es sólo material (Compras). El gasto operativo (subcontratos, fletes, renta de equipo, viáticos) todavía no tiene una cuenta contable mapeada a rubro de obra — pendiente del lado de Compaq, no de este tablero.</div>
+    </div>
+  `;
+}
+
+// ============ 04 NÓMINA ============
+function renderNomina(){
+  const meses = [...(DATA.nomina_por_mes||[])].sort((a,b)=> a.mes<b.mes?1:-1);
+  const filasMeses = meses.map(m=>`<tr><td>${m.mes}</td><td class="num">${fmtMoney.format(m.nomina_total)}</td><td class="num">${m.obras_activas}</td></tr>`).join('');
+  const ultimo = meses[0];
+  const filasDetalle = ultimo ? ultimo.detalle.map(d=>`<tr><td>${esc(d.nombre_obra)}</td><td class="num">${fmtMoney.format(d.monto_prorrateado)}</td></tr>`).join('') : '';
+
+  document.getElementById('p4').innerHTML = `
+    <div class="page-head">
+      <h2>Nómina y prorrateo por obra</h2>
+      <p>La nómina de cada mes se reparte entre las obras que estuvieron activas ese mes, a prorrata de su Monto Total Contrato.</p>
+    </div>
+    <div class="grid cols-2">
+      <div class="panel">
+        <h3 class="panel-title">Nómina total por mes</h3>
+        <div class="tablewrap"><table><thead><tr><th>Mes</th><th>Nómina total</th><th>Obras activas</th></tr></thead><tbody>${filasMeses}</tbody></table></div>
+      </div>
+      <div class="panel">
+        <h3 class="panel-title">Prorrateo del mes más reciente${ultimo? ' ('+ultimo.mes+')':''}</h3>
+        <div class="tablewrap"><table><thead><tr><th>Obra</th><th>Nómina prorrateada</th></tr></thead><tbody>${filasDetalle}</tbody></table></div>
+      </div>
+    </div>
+  `;
+}
+
+// ============ 05 PPTO VS REAL POR CONCEPTO ============
+function renderConceptosPagina(){
+  const conceptos = DATA.conceptos||[];
+  const obrasUnicas = [...new Map(conceptos.map(c=>[c.id_obra, c.nombre_obra])).entries()];
+  const opciones = obrasUnicas.map(([id,nombre])=>`<option value="${esc(id)}">${esc(nombre)}</option>`).join('');
+
+  document.getElementById('p5').innerHTML = `
+    <div class="page-head">
+      <h2>PPTO vs. Real por concepto</h2>
+      <p>Cantidad contratada contra cantidad ejecutada, concepto por concepto — el avance físico real de la obra.</p>
+    </div>
+    <div class="panel span-4">
+      <label style="font-size:12px;color:var(--ink-muted);">Obra: </label>
+      <select id="filtroObraConceptos">${opciones}</select>
+      <div id="tablaConceptos" style="margin-top:12px;"></div>
+    </div>
+  `;
+  if(obrasUnicas.length) renderConceptosTabla(obrasUnicas[0][0]);
+}
+
+function renderConceptosTabla(idObra){
+  const conceptos = (DATA.conceptos||[]).filter(c=>c.id_obra===idObra);
+  const filas = conceptos.map(c=>{
+    const pct = c.pct_avance==null?0:c.pct_avance;
+    return `<tr>
+      <td>${esc(c.clave)}</td>
+      <td>${esc(c.descripcion)}</td>
+      <td>${esc(c.unidad)}</td>
+      <td class="num">${c.cantidad_contratada}</td>
+      <td class="num">${c.cantidad_ejecutada_acumulada}</td>
+      <td><span class="miniprog"><span class="fill" style="width:${Math.min(100,pct*100)}%"></span></span>${fmtPct(c.pct_avance)}</td>
+      <td class="num">${fmtMoney.format(c.monto_contrato_concepto)}</td>
+      <td class="num">${fmtMoney.format(c.monto_devengado_concepto)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('tablaConceptos').innerHTML = `
+    <div class="tablewrap"><table>
+      <thead><tr><th>Clave</th><th>Descripción</th><th>Unidad</th><th>Cant. contratada</th><th>Cant. ejecutada</th><th>% Avance</th><th>Monto contrato</th><th>Monto devengado</th></tr></thead>
+      <tbody>${filas}</tbody>
+    </table></div>
+  `;
+}
+</script>
+
+</body>
+</html>
