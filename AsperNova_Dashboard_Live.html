@@ -144,19 +144,23 @@ const esc = (s) => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<
 
 let DATA = null;
 
-// ============ CARGA JSONP (evita problemas de CORS entre dominios) ============
+// ============ CARGA DE DATOS ============
+// Confirmado: el endpoint responde con Access-Control-Allow-Origin: *, así que
+// un fetch() directo funciona sin rodeos (no hace falta JSONP).
 function cargarDatos(){
-  return new Promise((resolve, reject) => {
-    const cb = 'dashCB' + Date.now();
-    const script = document.createElement('script');
-    let done = false;
-    const to = setTimeout(() => { if(!done){ done=true; limpiar(); reject(new Error('Tiempo de espera agotado (15s). ¿El deployment sigue activo?')); } }, 15000);
-    function limpiar(){ clearTimeout(to); delete window[cb]; if(script.parentNode) script.parentNode.removeChild(script); }
-    window[cb] = (data) => { if(done) return; done=true; limpiar(); resolve(data); };
-    script.onerror = () => { if(done) return; done=true; limpiar(); reject(new Error('No se pudo cargar el endpoint (revisa que el deployment de Apps Script siga activo).')); };
-    script.src = ENDPOINT + (ENDPOINT.indexOf('?')>-1?'&':'?') + 'callback=' + cb;
-    document.body.appendChild(script);
-  });
+  const controller = new AbortController();
+  const to = setTimeout(() => controller.abort(), 15000);
+  return fetch(ENDPOINT, {signal: controller.signal})
+    .then(r => {
+      clearTimeout(to);
+      if(!r.ok) throw new Error('El endpoint respondió con estado ' + r.status);
+      return r.json();
+    })
+    .catch(err => {
+      clearTimeout(to);
+      if(err.name === 'AbortError') throw new Error('Tiempo de espera agotado (15s). ¿El deployment sigue activo?');
+      throw err;
+    });
 }
 
 async function iniciar(){
