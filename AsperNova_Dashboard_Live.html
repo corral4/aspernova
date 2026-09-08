@@ -207,7 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
   document.body.addEventListener('change', (e) => {
-    if(e.target.id === 'filtroObraConceptos') renderConceptosTabla(e.target.value);
+    if(e.target.id === 'filtroObraConceptos'){ renderConceptosTabla(e.target.value); renderMaterialesObra(e.target.value); }
     if(e.target.id === 'filtroObraResumen') renderResumen(e.target.value);
     if(e.target.id === 'filtroObraGasto') renderGasto(e.target.value);
   });
@@ -264,7 +264,7 @@ function renderResumen(obraId){
       bodyHtml = `
         <div class="grid">
           <div class="panel kpi"><div class="label">Monto contratado</div><div class="value">${fmtMoney.format(o.monto_contrato)}</div><div class="note">${esc(o.cliente)} · OT ${esc(o.ot)} · ${esc(o.estado)}</div></div>
-          <div class="panel kpi"><div class="label">Compra real</div><div class="value">${fmtMoney.format(o.compra_real)}</div></div>
+          <div class="panel kpi"><div class="label">Compra real</div><div class="value">${fmtMoney.format(o.compra_real)}</div><div class="note">Material: ${fmtMoney.format(o.compra_material)} · Operativo: ${fmtMoney.format(o.gasto_operativo)}</div></div>
           <div class="panel kpi"><div class="label">Facturado real</div><div class="value">${fmtMoney.format(o.facturado_real)}</div><div class="note">${fmtPct(o.pct_facturado_contrato)} del contrato.</div></div>
           <div class="panel kpi"><div class="label">Nómina prorrateada acumulada</div><div class="value">${fmtMoney.format(o.nomina_prorrateada_acumulada)}</div></div>
         </div>
@@ -331,6 +331,7 @@ function renderRentabilidad(){
         <tbody>${filas}</tbody>
       </table></div>
       <div class="callout">
+        <b>Compra real</b> ya incluye material y gasto operativo (renta de equipo, combustible, viáticos, etc.) — antes el gasto operativo se excluía del margen por completo. Ver el desglose en la pestaña Gasto.<br><br>
         <b>Nómina prorrateada</b>: lo que le toca a esta obra de la nómina total de la empresa, mes con mes, a prorrata de su Monto Total Contrato entre las obras activas ese mes — es exactamente lo que ya se resta en "Margen a contrato".<br><br>
         <b>Posición de facturación</b> compara qué tanto has facturado contra qué tanto has ejecutado, ambos como % del contrato. Ejemplo: 60% facturado contra 40% de avance devengado da +20% — facturaste por delante de tu propio avance (riesgo si el cliente audita contra obra ejecutada). Si fuera −20%, ya ejecutaste más de lo que has cobrado. Sale "—" en casi todas las obras porque casi ninguna tiene avances capturados en 3_Avances_Diarios todavía; se va llenando con la captura.
       </div>
@@ -353,27 +354,32 @@ function renderGasto(obraId){
   const rowsCat = DATA.gasto_por_categoria || [];
   const rowsProv = DATA.gasto_por_proveedor || [];
   const rowsSC = DATA.gasto_sin_clasificar || [];
+  const rowsOp = DATA.gasto_operativo_por_producto || [];
 
   const obrasConGasto = [...new Map(rowsCat.filter(r=>r.id_obra).map(c=>[c.id_obra, c.nombre_obra])).entries()];
   const opciones = ['<option value="">Todo el portafolio</option>']
     .concat(obrasConGasto.map(([id,nombre])=>`<option value="${esc(id)}" ${id===obraId?'selected':''}>${esc(nombre)}</option>`))
     .join('');
 
-  let cats, provs, sc;
+  let cats, provs, sc, ops;
   if(obraId){
     cats = rowsCat.filter(r=>r.id_obra===obraId);
     provs = rowsProv.filter(r=>r.id_obra===obraId);
     sc = rowsSC.filter(r=>r.id_obra===obraId);
+    ops = rowsOp.filter(r=>r.id_obra===obraId);
   } else {
     cats = agruparSuma_(rowsCat, 'categoria');
     provs = agruparSuma_(rowsProv, 'proveedor');
     sc = rowsSC;
+    ops = agruparSuma_(rowsOp, 'nombre_producto');
   }
   cats.sort((a,b)=>b.monto-a.monto);
   provs.sort((a,b)=>b.monto-a.monto);
   sc = [...sc].sort((a,b)=>b.monto-a.monto);
+  ops = ops.filter(o=>o.monto>0).sort((a,b)=>b.monto-a.monto);
 
-  const total = cats.reduce((s,c)=>s+c.monto,0);
+  const totalMaterial = cats.reduce((s,c)=>s+c.monto,0);
+  const totalOperativo = ops.reduce((s,o)=>s+o.monto,0);
   const maxCat = Math.max(1, ...cats.map(c=>c.monto));
   const filasCat = cats.map(c=>`
     <div class="row"><div class="lbl">${esc(c.categoria)}</div><div class="track"><div class="fill" style="width:${(c.monto/maxCat*100).toFixed(1)}%"></div></div><div class="val">${fmtMoney.format(c.monto)}</div></div>
@@ -384,6 +390,11 @@ function renderGasto(obraId){
     <div class="row"><div class="lbl">${esc(p.proveedor)}</div><div class="track"><div class="fill" style="width:${(p.monto/maxProv*100).toFixed(1)}%"></div></div><div class="val">${fmtMoney.format(p.monto)}</div></div>
   `).join('');
 
+  const maxOp = Math.max(1, ...ops.map(o=>o.monto));
+  const filasOp = ops.map(o=>`
+    <div class="row"><div class="lbl">${esc(o.nombre_producto)}</div><div class="track"><div class="fill" style="width:${(o.monto/maxOp*100).toFixed(1)}%;background:var(--amber);"></div></div><div class="val">${fmtMoney.format(o.monto)}</div></div>
+  `).join('');
+
   const filasSC = sc.map(s=>`
     <tr><td>${esc(s.nombre_obra||'')}</td><td>${esc(s.codigo_producto)}</td><td>${esc(s.nombre_producto)}</td><td class="num">${s.unidades}</td><td class="num">${fmtMoney.format(s.monto)}</td></tr>
   `).join('');
@@ -391,13 +402,15 @@ function renderGasto(obraId){
 
   document.getElementById('p3').innerHTML = `
     <div class="page-head">
-      <h2>Detalle de gasto en materiales</h2>
-      <p>En qué se está gastando el dinero de compras: por categoría de producto y por proveedor.</p>
+      <h2>Detalle de gasto</h2>
+      <p>Material comprado y gasto operativo, por separado — ambos ya cuentan dentro del margen de cada obra.</p>
     </div>
     <div class="filtro-row"><label>Obra: </label><select id="filtroObraGasto">${opciones}</select></div>
-    <div class="grid cols-2">
-      <div class="panel kpi"><div class="label">Gasto total en material</div><div class="value">${fmtMoney.format(total)}</div><div class="note">${cats.length} categorías distintas.</div></div>
-      <div class="panel kpi"><div class="label">Categoría con mayor peso</div><div class="value">${cats[0]?esc(cats[0].categoria):'—'}</div><div class="note">${cats[0]?fmtMoney.format(cats[0].monto)+' · '+fmtPct(cats[0].monto/(total||1)):''}</div></div>
+    <div class="grid">
+      <div class="panel kpi"><div class="label">Gasto en material</div><div class="value">${fmtMoney.format(totalMaterial)}</div><div class="note">${cats.length} categorías distintas.</div></div>
+      <div class="panel kpi"><div class="label">Gasto operativo</div><div class="value">${fmtMoney.format(totalOperativo)}</div><div class="note">Renta de equipo, combustible, viáticos, etc. (REF = Gastos Operativos).</div></div>
+      <div class="panel kpi"><div class="label">Total combinado</div><div class="value">${fmtMoney.format(totalMaterial+totalOperativo)}</div><div class="note">Esto es lo que se resta en "Compra real" del margen.</div></div>
+      <div class="panel kpi"><div class="label">Categoría con mayor peso</div><div class="value">${cats[0]?esc(cats[0].categoria):'—'}</div><div class="note">${cats[0]?fmtMoney.format(cats[0].monto)+' · '+fmtPct(cats[0].monto/(totalMaterial||1)):''}</div></div>
     </div>
     <div class="grid cols-2" style="margin-top:11px;">
       <div class="panel">
@@ -407,12 +420,18 @@ function renderGasto(obraId){
       </div>
       <div class="panel">
         <h3 class="panel-title">Compras por proveedor</h3>
+        <div class="panel-sub">Sólo material — no incluye gasto operativo.</div>
         <div class="barlist">${filasProv || '<div class="panel-sub">Sin compras registradas para esta selección.</div>'}</div>
       </div>
     </div>
     <div class="panel span-4" style="margin-top:11px;">
+      <h3 class="panel-title">Gasto operativo, por producto (${fmtMoney.format(totalOperativo)})</h3>
+      <div class="panel-sub">Filas de Compras con REF = "Gastos Operativos", desglosadas por el campo Nombre (Producto). Antes se excluían del análisis por completo — ya cuentan en Compra real y en el margen de cada obra.</div>
+      <div class="barlist">${filasOp || '<div class="panel-sub">Sin gasto operativo registrado para esta selección.</div>'}</div>
+    </div>
+    <div class="panel span-4" style="margin-top:11px;">
       <h3 class="panel-title">Detalle de "Sin clasificar" (${fmtMoney.format(totalSC)})</h3>
-      <div class="panel-sub">"Sin clasificar" = compras cuyo Código Producto no aparece todavía en tu hoja CAT_PROD. Agrega estos códigos ahí (con su Clasificación Producto 1) para que dejen de salir aquí.</div>
+      <div class="panel-sub">"Sin clasificar" = compras de material cuyo Código Producto no aparece todavía en tu hoja CAT_PROD (el gasto operativo no entra aquí, es un concepto aparte). Agrega estos códigos a CAT_PROD para que dejen de salir en esta lista.</div>
       <div class="tablewrap"><table>
         <thead><tr><th>Obra</th><th>Código</th><th>Producto</th><th>Unidades</th><th>Monto</th></tr></thead>
         <tbody>${filasSC || '<tr><td colspan="5">Nada sin clasificar en esta selección — buen trabajo.</td></tr>'}</tbody>
@@ -463,8 +482,36 @@ function renderConceptosPagina(){
       <div id="tablaConceptos"></div>
       <div class="callout">"Costo real" y "Margen devengado" salen de cruzar el material que se usó en cada avance (columna Descripcion Material de 3_Avances_Diarios) contra lo comprado de ese material en esa misma obra. Si un concepto no tiene ningún avance capturado todavía, estas columnas quedan en blanco — no en cero, para no confundir "sin dato" con "sin costo".</div>
     </div>
+    <div class="panel span-4" style="margin-top:11px;">
+      <h3 class="panel-title">Materiales: comprado vs. usado en avances (toda la obra)</h3>
+      <div class="panel-sub">A nivel de la obra completa, no por concepto — un material puede repartirse entre varios conceptos, así que la comparación correcta es contra el total. "Usado" = suma de Cantidad Ejecutada (día) en todos los avances de ese material, sin importar en qué concepto.</div>
+      <div id="tablaMateriales"></div>
+      <div class="callout">Este cruce depende de que el nombre del material se escriba igual en Compras y en 3_Avances_Diarios. Si ves "Comprado: 0" en algo que sabes que sí se compró, probablemente el nombre quedó capturado distinto en una de las dos hojas (revisa mayúsculas, abreviaturas o símbolos como comillas de pulgada).</div>
+    </div>
   `;
-  if(obrasUnicas.length) renderConceptosTabla(obrasUnicas[0][0]);
+  if(obrasUnicas.length){
+    renderConceptosTabla(obrasUnicas[0][0]);
+    renderMaterialesObra(obrasUnicas[0][0]);
+  }
+}
+
+function renderMaterialesObra(idObra){
+  const filas = (DATA.materiales_por_obra||[]).filter(m=>m.id_obra===idObra).sort((a,b)=>Math.abs(b.diferencia)-Math.abs(a.diferencia));
+  const filasHtml = filas.map(m=>{
+    const alerta = Math.abs(m.diferencia) > 0 && m.unidades_compradas === 0 && m.unidades_registradas_avances > 0;
+    return `<tr class="${alerta?'alerta':''}">
+      <td>${esc(m.material)}</td>
+      <td class="num">${m.unidades_compradas}</td>
+      <td class="num">${m.unidades_registradas_avances}</td>
+      <td class="num">${m.diferencia}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('tablaMateriales').innerHTML = `
+    <div class="tablewrap"><table>
+      <thead><tr><th>Material</th><th>Comprado</th><th>Registrado en avances</th><th>Diferencia</th></tr></thead>
+      <tbody>${filasHtml || '<tr><td colspan="4">Sin materiales registrados en avances para esta obra.</td></tr>'}</tbody>
+    </table></div>
+  `;
 }
 
 function renderConceptosTabla(idObra){
