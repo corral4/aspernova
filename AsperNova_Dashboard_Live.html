@@ -229,10 +229,7 @@ function renderResumen(obraId){
   obraId = obraId || '';
   const obras = DATA.obras || [];
   const r = DATA.resumen || {};
-
-  const opciones = ['<option value="">Todo el portafolio</option>']
-    .concat(obras.map(o=>`<option value="${esc(o.id_obra)}" ${o.id_obra===obraId?'selected':''}>${esc(o.nombre_obra)}</option>`))
-    .join('');
+  const opciones = opcionesFiltroObra_(obraId, true);
 
   let bodyHtml;
   if(!obraId){
@@ -257,6 +254,19 @@ function renderResumen(obraId){
       </div>
       <div class="callout">La mayoría de las obras del portafolio son de reciente arranque y todavía no tienen avances capturados en <span class="mono">3_Avances_Diarios</span> — por eso el avance devengado no aparece de forma general todavía; se irá poblando obra por obra conforme haya captura.</div>
     `;
+  } else if(obraId.indexOf('OT-')===0){
+    const o = (DATA.obras_sin_mapear||[]).find(x=>x.id_obra===obraId);
+    if(!o){ bodyHtml = '<div class="panel">No se encontró esa OT.</div>'; }
+    else {
+      bodyHtml = `
+        <div class="callout ember">Esta OT no está mapeada en <span class="mono">1_Obras</span>: no hay Monto de Contrato ni fechas capturadas, así que no se puede calcular margen ni nómina prorrateada para ella. Sólo se muestra su actividad real de Compras y Ventas. Agrégala a 1_Obras (con su Monto Total Contrato) para que aparezca con margen completo en Rentabilidad.</div>
+        <div class="grid cols-3" style="margin-top:11px;">
+          <div class="panel kpi"><div class="label">Compra real</div><div class="value">${fmtMoney.format(o.compra_real)}</div><div class="note">Material: ${fmtMoney.format(o.compra_material)} · Operativo: ${fmtMoney.format(o.gasto_operativo)}</div></div>
+          <div class="panel kpi"><div class="label">Facturado real</div><div class="value">${fmtMoney.format(o.facturado_real)}</div></div>
+          <div class="panel kpi"><div class="label">Margen</div><div class="value">—</div><div class="note">No disponible sin Monto Total Contrato.</div></div>
+        </div>
+      `;
+    }
   } else {
     const o = obras.find(x=>x.id_obra===obraId);
     if(!o){ bodyHtml = '<div class="panel">No se encontró esa obra.</div>'; }
@@ -320,6 +330,9 @@ function renderRentabilidad(){
     </tr>`;
   }).join('');
 
+  const sm = DATA.obras_sin_mapear || [];
+  const filasSM = sm.map(o=>`<tr><td>${esc(o.nombre_obra)}</td><td class="num">${fmtMoney.format(o.compra_real)}</td><td class="num">${fmtMoney.format(o.facturado_real)}</td></tr>`).join('');
+
   document.getElementById('p2').innerHTML = `
     <div class="page-head">
       <h2>Rentabilidad por obra</h2>
@@ -336,6 +349,15 @@ function renderRentabilidad(){
         <b>Posición de facturación</b> compara qué tanto has facturado contra qué tanto has ejecutado, ambos como % del contrato. Ejemplo: 60% facturado contra 40% de avance devengado da +20% — facturaste por delante de tu propio avance (riesgo si el cliente audita contra obra ejecutada). Si fuera −20%, ya ejecutaste más de lo que has cobrado. Sale "—" en casi todas las obras porque casi ninguna tiene avances capturados en 3_Avances_Diarios todavía; se va llenando con la captura.
       </div>
     </div>
+    ${sm.length ? `
+    <div class="panel span-4" style="margin-top:11px;">
+      <h3 class="panel-title">OT sin mapear en 1_Obras (${sm.length})</h3>
+      <div class="panel-sub">Tienen actividad real en Compras/Ventas pero no existen como fila en 1_Obras — sin Monto Total Contrato no se les puede calcular margen. Agrégalas a 1_Obras para que aparezcan arriba con margen completo.</div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>OT</th><th>Compra real</th><th>Facturado real</th></tr></thead>
+        <tbody>${filasSM}</tbody>
+      </table></div>
+    </div>` : ''}
   `;
 }
 
@@ -349,6 +371,25 @@ function agruparSuma_(arr, keyField){
   return [...m.entries()].map(([k,monto])=>({ [keyField]: k, monto }));
 }
 
+// Construye las <option> de un filtro de obra: obras reales (con su OT en la etiqueta)
+// + opcionalmente un <optgroup> con las OT que aparecen en Compras/Ventas pero no
+// existen en 1_Obras (sin margen calculable, sólo actividad real).
+function opcionesFiltroObra_(obraIdActual, incluirSinMapear){
+  obraIdActual = obraIdActual || '';
+  const obras = DATA.obras || [];
+  let html = '<option value="">Todo el portafolio</option>';
+  html += obras.map(o=>`<option value="${esc(o.id_obra)}" ${o.id_obra===obraIdActual?'selected':''}>${esc(o.nombre_obra)} — OT ${esc(o.ot)}</option>`).join('');
+  if(incluirSinMapear){
+    const sm = DATA.obras_sin_mapear || [];
+    if(sm.length){
+      html += '<optgroup label="OT sin mapear en 1_Obras (sin margen calculable)">';
+      html += sm.map(o=>`<option value="${esc(o.id_obra)}" ${o.id_obra===obraIdActual?'selected':''}>${esc(o.nombre_obra)}</option>`).join('');
+      html += '</optgroup>';
+    }
+  }
+  return html;
+}
+
 function renderGasto(obraId){
   obraId = obraId || '';
   const rowsCat = DATA.gasto_por_categoria || [];
@@ -356,10 +397,7 @@ function renderGasto(obraId){
   const rowsSC = DATA.gasto_sin_clasificar || [];
   const rowsOp = DATA.gasto_operativo_por_producto || [];
 
-  const obrasConGasto = [...new Map(rowsCat.filter(r=>r.id_obra).map(c=>[c.id_obra, c.nombre_obra])).entries()];
-  const opciones = ['<option value="">Todo el portafolio</option>']
-    .concat(obrasConGasto.map(([id,nombre])=>`<option value="${esc(id)}" ${id===obraId?'selected':''}>${esc(nombre)}</option>`))
-    .join('');
+  const opciones = opcionesFiltroObra_(obraId, true);
 
   let cats, provs, sc, ops;
   if(obraId){
