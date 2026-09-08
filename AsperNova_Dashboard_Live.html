@@ -473,9 +473,25 @@ function renderConceptosTabla(idObra){
     const pct = c.pct_avance==null?0:c.pct_avance;
     const costoTxt = c.costo_real_concepto==null ? '—' : fmtMoney.format(c.costo_real_concepto);
     const margenTxt = c.margen_devengado_concepto==null ? '—' : fmtMoney.format(c.margen_devengado_concepto);
-    const materialesTxt = (c.materiales_cargados||[]).length
-      ? c.materiales_cargados.map(m=>`${esc(m.material)} (${m.unidades} ${esc(c.unidad)} · ${fmtMoney.format(m.monto_costo)})`).join('; ')
-      : '<span style="color:var(--ink-muted);">sin material ligado</span>';
+    const mats = c.materiales_cargados || [];
+    let materialesCelda;
+    if(!mats.length){
+      materialesCelda = '<span style="color:var(--ink-muted);font-size:11px;">sin material ligado</span>';
+    } else {
+      const filasMat = mats.map(m=>`
+        <tr><td>${esc(m.material)}</td><td class="num">${m.unidades}</td><td class="num">${fmtMoney.format(m.costo_unitario)}</td><td class="num">${fmtMoney.format(m.monto_costo)}</td></tr>
+      `).join('');
+      materialesCelda = `
+        <details>
+          <summary style="cursor:pointer;color:var(--steel);font-size:11px;font-family:'IBM Plex Mono',monospace;">+ ${mats.length} material${mats.length!==1?'es':''}</summary>
+          <div style="margin-top:6px;">
+            <table style="font-size:10.5px;min-width:260px;">
+              <thead><tr><th>Material</th><th>Cant. registrada*</th><th>Costo unit.</th><th>Monto</th></tr></thead>
+              <tbody>${filasMat}</tbody>
+            </table>
+          </div>
+        </details>`;
+    }
     return `<tr>
       <td>${esc(c.clave)}</td>
       <td>${esc(c.descripcion)}</td>
@@ -487,7 +503,7 @@ function renderConceptosTabla(idObra){
       <td class="num">${fmtMoney.format(c.monto_devengado_concepto)}</td>
       <td class="num">${costoTxt}</td>
       <td class="num">${margenTxt}</td>
-      <td style="max-width:240px;font-size:11px;">${materialesTxt}</td>
+      <td style="min-width:150px;">${materialesCelda}</td>
     </tr>`;
   }).join('');
   document.getElementById('tablaConceptos').innerHTML = `
@@ -495,6 +511,7 @@ function renderConceptosTabla(idObra){
       <thead><tr><th>Clave</th><th>Descripción</th><th>Unidad</th><th>Cant. contratada</th><th>Cant. ejecutada</th><th>% Avance</th><th>Monto contrato</th><th>Monto devengado</th><th>Costo real</th><th>Margen devengado</th><th>Materiales cargados</th></tr></thead>
       <tbody>${filas}</tbody>
     </table></div>
+    <div class="panel-sub" style="margin-top:6px;">*Cant. registrada = Cantidad Ejecutada (día) tal como la captura el residente, en la unidad del <b>concepto</b> (columna "Unidad" de esta tabla) — no es una unidad física propia del material, porque el formulario de avances no la captura por separado hoy.</div>
   `;
 }
 
