@@ -670,6 +670,7 @@ async function guardarSupuestos(){
   const otros = document.getElementById('inputOtrosGastos').value;
   const pctFactPct = document.getElementById('inputPctFacturacion').value;
   const saldoInicial = document.getElementById('inputSaldoInicial').value;
+  const ingresosServicios = document.getElementById('inputIngresosServicios').value;
   const pin = document.getElementById('pinSupuestos').value;
   const msgEl = document.getElementById('mensajeSupuestos');
   const btn = document.getElementById('btnGuardarSupuestos');
@@ -679,19 +680,26 @@ async function guardarSupuestos(){
   const otrosNum = Number(otros);
   const pctNum = Number(pctFactPct)/100;
   const saldoNum = Number(saldoInicial);
-  if([factorNum, otrosNum, pctNum, saldoNum].some(n=>isNaN(n))){
-    msgEl.className='error'; msgEl.textContent='Revisa que los 4 campos sean números válidos.'; return;
+  const ingresosServNum = Number(ingresosServicios);
+  if([factorNum, otrosNum, pctNum, saldoNum, ingresosServNum].some(n=>isNaN(n))){
+    msgEl.className='error'; msgEl.textContent='Revisa que los 5 campos sean números válidos.'; return;
   }
 
   btn.disabled = true;
   msgEl.className=''; msgEl.textContent='Guardando…';
-  const url = `${ENDPOINT}?accion=guardar_supuestos&pin=${encodeURIComponent(pin)}&factor_costo=${factorNum}&otros_gastos=${otrosNum}&pct_facturacion=${pctNum}&saldo_inicial=${saldoNum}`;
+  const url = `${ENDPOINT}?accion=guardar_supuestos&pin=${encodeURIComponent(pin)}&factor_costo=${factorNum}&otros_gastos=${otrosNum}&pct_facturacion=${pctNum}&saldo_inicial=${saldoNum}&ingresos_servicios=${ingresosServNum}`;
   try{
     const r = await fetch(url);
     const data = await r.json();
     if(data.ok){
       msgEl.className='ok'; msgEl.textContent='Guardado. Recalculando…';
       await iniciar();
+    } else if(data.ok === undefined){
+      // la respuesta no trae el campo "ok" en absoluto -> probablemente el .gs desplegado
+      // es una versión vieja que todavía no reconoce accion=guardar_supuestos.
+      msgEl.className='error';
+      msgEl.textContent = 'El servidor no reconoció la acción de guardar — probablemente el código de Apps Script desplegado está desactualizado. Vuelve a pegar el .gs más reciente en el editor y prueba de nuevo (no hace falta redeploy, sólo pegar y correr actualizarCacheDashboard una vez).';
+      btn.disabled = false;
     } else {
       msgEl.className='error'; msgEl.textContent = data.error || 'No se pudo guardar.';
       btn.disabled = false;
@@ -756,7 +764,7 @@ function renderFlujoEfectivo(obraId){
   document.getElementById('p7').innerHTML = `
     <div class="page-head">
       <h2>Flujo de efectivo — próximos ${(fe.meses||[]).length} meses</h2>
-      <p>Proyección continua: los meses ya transcurridos usan datos reales, el resto se calcula con los supuestos de abajo. Se desliza sola cada vez que corre el recálculo.</p>
+      <p>Proyección continua: los meses ya transcurridos usan datos reales, el resto se calcula con los supuestos de abajo. Se desliza sola cada vez que corre el recálculo — en cuanto pasa un mes, deja de proyectarse.</p>
     </div>
 
     <div class="panel span-4">
@@ -766,12 +774,13 @@ function renderFlujoEfectivo(obraId){
         <div class="field"><label>Factor de costo (%)</label><input type="number" id="inputFactorCosto" value="${((s.factor_costo_default||0)*100).toFixed(1)}" step="0.5"></div>
         <div class="field"><label>Otros gastos + impuestos ($/mes)</label><input type="number" id="inputOtrosGastos" value="${s.otros_gastos_e_impuestos_mensual||0}" step="1000"></div>
         <div class="field"><label>% Facturación mensual</label><input type="number" id="inputPctFacturacion" value="${((s.pct_facturacion_mensual||0)*100).toFixed(1)}" step="1"></div>
+        <div class="field"><label>Ingresos por servicios ($/mes)</label><input type="number" id="inputIngresosServicios" value="${s.ingresos_servicios_mensual||0}" step="1000"></div>
         <div class="field"><label>Saldo inicial caja + bancos ($)</label><input type="number" id="inputSaldoInicial" value="${s.saldo_inicial_caja||0}" step="10000"></div>
         <div class="field"><label>PIN</label><input type="password" id="pinSupuestos" placeholder="····"></div>
         <button id="btnGuardarSupuestos">Guardar y recalcular</button>
       </div>
       <div id="mensajeSupuestos"></div>
-      <div class="panel-sub" style="margin-top:8px;">Saldo inicial ${avisoSaldo} — actualízalo cada mes con tu saldo real de caja y bancos para que la proyección arranque del punto correcto. Nómina proyectada: ${fmtMoney.format(s.nomina_mensual_proyectada||0)}/mes (del último mes real: ${s.mes_base_nomina||'—'}). Excepciones de factor de costo por obra se editan en Sheets.</div>
+      <div class="panel-sub" style="margin-top:8px;">Saldo inicial ${avisoSaldo} — actualízalo cada mes con tu saldo real de caja y bancos para que la proyección arranque del punto correcto. "Ingresos por servicios" son las pólizas/mantenimientos — un ingreso fijo mensual aparte de las obras. Nómina proyectada: ${fmtMoney.format(s.nomina_mensual_proyectada||0)}/mes (del último mes real: ${s.mes_base_nomina||'—'}). Excepciones de factor de costo por obra se editan en Sheets.</div>
     </div>
 
     <div class="filtro-row" style="margin-top:11px;"><label>Ver: </label><select id="filtroObraFlujo">${opciones}</select></div>
@@ -796,6 +805,9 @@ function renderFlujoEfectivo(obraId){
       </table></div>
     </div>
 
+    ${!obraId ? renderPivoteObraMes_('Facturación cobrada, por obra y mes (mes de cobro)', fe.por_obra||[], 'ingresos', (fe.meses||[]).map(m=>m.mes)) : ''}
+    ${!obraId ? renderPivoteObraMes_('Compra estimada, por obra y mes', fe.por_obra||[], 'egresos', (fe.meses||[]).map(m=>m.mes)) : ''}
+
     <div class="panel span-4" style="margin-top:11px;">
       <h3 class="panel-title">Compras únicas — tanque / equipo de bombeo</h3>
       <div class="panel-sub">Detectadas por Tipo_Costo="Compra única" en 2_Catalogo_Conceptos. "Ya gastado" sale de compras clasificadas como Tanque/Bomba en CAT_PROD, dentro de esa misma obra.</div>
@@ -809,7 +821,13 @@ function renderFlujoEfectivo(obraId){
   const chart = document.getElementById('chartFlujo');
   if(meses.length){
     const vals = meses.map(m=>m.flujo_acumulado);
-    const W = 820, H = 260, padL=70, padR=20, padT=20, padB=40;
+    const fmtCompacto = (v) => {
+      const abs = Math.abs(v), sign = v<0?'-':'';
+      if(abs>=1e6) return sign+'$'+(abs/1e6).toFixed(1)+'M';
+      if(abs>=1e3) return sign+'$'+(abs/1e3).toFixed(0)+'k';
+      return sign+'$'+abs.toFixed(0);
+    };
+    const W = 900, H = 300, padL=70, padR=20, padT=40, padB=40;
     const plotW = W-padL-padR, plotH = H-padT-padB;
     const minVal = Math.min(...vals, 0), maxVal = Math.max(...vals, 0);
     const range = (maxVal - minVal) || 1;
@@ -817,19 +835,54 @@ function renderFlujoEfectivo(obraId){
     const xFor = i => padL + (plotW * i/(Math.max(1,vals.length-1)));
     const zeroYPix = yFor(0);
     const points = vals.map((v,i)=>`${xFor(i)},${yFor(v)}`).join(' ');
-    const minIdx = vals.indexOf(minVal);
 
     chart.innerHTML = `
-      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:240px;">
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:270px;">
         <line x1="${padL}" y1="${zeroYPix}" x2="${W-padR}" y2="${zeroYPix}" stroke="var(--line-strong)" stroke-width="1.4" stroke-dasharray="4 3"/>
         <text x="${padL-8}" y="${zeroYPix+4}" text-anchor="end" font-family="IBM Plex Mono" font-size="10" fill="var(--ink-muted)">$0</text>
         <polyline points="${points}" fill="none" stroke="var(--steel)" stroke-width="2.2"/>
-        ${vals.map((v,i)=>`<circle cx="${xFor(i)}" cy="${yFor(v)}" r="3" fill="${v<0?'var(--ember)':'var(--sage)'}"/>`).join('')}
+        ${vals.map((v,i)=>{
+          const arriba = i%2===0;
+          const ly = arriba ? yFor(v)-11 : yFor(v)+18;
+          const color = v<0 ? 'var(--ember)' : 'var(--ink)';
+          return `<circle cx="${xFor(i)}" cy="${yFor(v)}" r="3" fill="${v<0?'var(--ember)':'var(--sage)'}"/>
+                  <text x="${xFor(i)}" y="${ly}" text-anchor="middle" font-family="IBM Plex Mono" font-size="9.5" fill="${color}">${fmtCompacto(v)}</text>`;
+        }).join('')}
         ${meses.map((m,i)=>`<text x="${xFor(i)}" y="${H-10}" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" fill="var(--ink-muted)">${m.mes.slice(5)}</text>`).join('')}
-        <text x="${xFor(minIdx)}" y="${Math.max(14,yFor(minVal)-10)}" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="var(--ember)" font-weight="600">${fmtMoney.format(minVal)}</text>
       </svg>
     `;
   }
+}
+
+// Tabla pivote Obra × Mes, reutilizando lo que ya viene en flujo_efectivo.por_obra (no requiere
+// nada nuevo del backend). campo = 'ingresos' o 'egresos'. Ceros se muestran como "-", igual
+// que en las tablas de Excel de Rogelio, para que se lean más limpias con tantas columnas.
+const fmtPivote = new Intl.NumberFormat('es-MX', {maximumFractionDigits:0});
+function renderPivoteObraMes_(titulo, porObra, campo, mesesLista){
+  const celda = (v) => (v && Math.abs(v)>=1) ? fmtPivote.format(v) : '-';
+  const filas = porObra.map(po=>{
+    const porMes = new Map(po.meses.map(m=>[m.mes, m[campo]]));
+    const tds = mesesLista.map(m=>`<td class="num">${celda(porMes.get(m)||0)}</td>`).join('');
+    const total = po.meses.reduce((s,m)=>s+(m[campo]||0),0);
+    return `<tr><td>${esc(po.nombre_obra)}</td>${tds}<td class="num" style="font-weight:600;">${celda(total)}</td></tr>`;
+  }).join('');
+  const totalesPorMes = mesesLista.map(m => porObra.reduce((s,po)=>{
+    const mm = po.meses.find(x=>x.mes===m);
+    return s + (mm ? (mm[campo]||0) : 0);
+  }, 0));
+  const granTotal = totalesPorMes.reduce((a,b)=>a+b,0);
+  const filaTotal = `<tr style="font-weight:600;border-top:2px solid var(--line-strong);"><td>Total</td>${totalesPorMes.map(v=>`<td class="num">${celda(v)}</td>`).join('')}<td class="num">${celda(granTotal)}</td></tr>`;
+  const headerMeses = mesesLista.map(m=>`<th>${m}</th>`).join('');
+  return `
+    <div class="panel span-4" style="margin-top:11px;">
+      <h3 class="panel-title">${titulo}</h3>
+      <div class="panel-sub">Pesos, sin IVA. "-" = cero o sin dato ese mes.</div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Obra</th>${headerMeses}<th>Total</th></tr></thead>
+        <tbody>${filas}${filaTotal}</tbody>
+      </table></div>
+    </div>
+  `;
 }
 </script>
 
