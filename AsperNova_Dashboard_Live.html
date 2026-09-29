@@ -760,6 +760,10 @@ function renderFlujoEfectivo(obraId){
   `).join('');
 
   const sinDias = fe.obras_sin_dias_cliente || [];
+  const sinObra = fe.cobranza_sin_obra || [];
+  const filasSinObra = sinObra.map(item=>`
+    <tr><td>${esc(item.serie_folio)}</td><td>${esc(item.cliente)}</td><td class="num">${fmtMoney.format(item.monto)}</td><td>${item.mes_cobro}</td><td>${item.ot?esc(item.ot):'—'}</td></tr>
+  `).join('');
 
   document.getElementById('p7').innerHTML = `
     <div class="page-head">
@@ -780,7 +784,7 @@ function renderFlujoEfectivo(obraId){
         <button id="btnGuardarSupuestos">Guardar y recalcular</button>
       </div>
       <div id="mensajeSupuestos"></div>
-      <div class="panel-sub" style="margin-top:8px;">Saldo inicial ${avisoSaldo} — actualízalo cada mes con tu saldo real de caja y bancos para que la proyección arranque del punto correcto. "Ingresos por servicios" son las pólizas/mantenimientos — un ingreso fijo mensual aparte de las obras. Nómina proyectada: ${fmtMoney.format(s.nomina_mensual_proyectada||0)}/mes (del último mes real: ${s.mes_base_nomina||'—'}). Excepciones de factor de costo por obra se editan en Sheets.</div>
+      <div class="panel-sub" style="margin-top:8px;">Saldo inicial ${avisoSaldo} — actualízalo cada mes con tu saldo real de caja y bancos para que la proyección arranque del punto correcto. "Ingresos por servicios" son las pólizas/mantenimientos — un ingreso fijo mensual aparte de las obras. Nómina proyectada: ${fmtMoney.format(s.nomina_mensual_proyectada||0)}/mes (del último mes real: ${s.mes_base_nomina||'—'}). Excepciones de factor de costo por obra y por cliente se editan en Sheets.</div>
     </div>
 
     <div class="filtro-row" style="margin-top:11px;"><label>Ver: </label><select id="filtroObraFlujo">${opciones}</select></div>
@@ -796,6 +800,16 @@ function renderFlujoEfectivo(obraId){
       <h3 class="panel-title">Caja acumulada proyectada${obraId && vista ? ' — ' + esc(vista.nombre_obra) : ' — portafolio completo'}</h3>
       <div id="chartFlujo"></div>
     </div>
+
+    ${!obraId && sinObra.length ? `
+    <div class="panel span-4" style="margin-top:11px;">
+      <h3 class="panel-title">Cobranza pendiente sin obra identificada (${sinObra.length})</h3>
+      <div class="panel-sub">Folios de la hoja Cobranza que sí cuentan en el total del portafolio de arriba, pero cuyo folio no apareció en Ventas (ej. saldos iniciales de clientes) o cuya OT no está mapeada en 1_Obras — por eso no se les puede atar a una obra específica.</div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Serie / Folio</th><th>Cliente</th><th>Monto</th><th>Mes de cobro</th><th>OT (si se identificó)</th></tr></thead>
+        <tbody>${filasSinObra}</tbody>
+      </table></div>
+    </div>` : ''}
 
     <div class="panel span-4" style="margin-top:11px;">
       <h3 class="panel-title">Detalle mes a mes</h3>
