@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Asistencia del personal — AsperNova</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F1F4F3; --panel:#FFFFFF; --ink:#16232B; --ink-muted:#5C6B72;
+    --line:#CBD4D2; --line-strong:#8CA0A0;
+    --steel:#2C5F7C; --steel-soft:#DCE6EA;
+    --sage:#3F7864; --sage-soft:#DCEBE3;
+    --ember:#B3492D; --ember-soft:#F4E1DB;
+    --amber:#B98A2E; --amber-soft:#F2E9D6;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);}
+  body{font-family:'IBM Plex Sans',sans-serif;font-size:14px;line-height:1.5;}
+  h1,h2,h3{font-family:'Space Grotesk',sans-serif;margin:0;}
+  [hidden]{display:none !important;}
+
+  /* ---- PIN ---- */
+  #gate{max-width:380px;margin:12vh auto 0;padding:0 20px;}
+  #gate .panel{padding:22px;}
+  #gate h1{font-size:19px;font-weight:600;margin-bottom:4px;}
+  #gate p{color:var(--ink-muted);font-size:12.5px;margin:0 0 14px;}
+  #gate .row{display:flex;gap:8px;}
+  input[type=password]{flex:1;font-family:'IBM Plex Mono',monospace;font-size:15px;border:1px solid var(--line-strong);padding:9px 11px;background:#fff;color:var(--ink);min-width:0;}
+  button.primary{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13px;border:1px solid var(--steel);background:var(--steel);color:#fff;padding:9px 16px;cursor:pointer;}
+  button.primary:disabled{opacity:.5;cursor:default;}
+  button.ghost{font-family:'IBM Plex Mono',monospace;font-size:11px;border:1px solid var(--line-strong);background:var(--panel);padding:5px 10px;cursor:pointer;color:var(--steel);}
+  button.ghost:hover{background:var(--steel-soft);}
+  #gateMsg{font-size:12px;margin-top:10px;min-height:18px;color:var(--ember);}
+
+  /* ---- layout ---- */
+  .topbar{border-bottom:1px solid var(--line-strong);}
+  .topbar-inner{max-width:1280px;margin:0 auto;padding:14px 20px;display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;}
+  .topbar h1{font-size:19px;font-weight:600;}
+  .sub{color:var(--ink-muted);font-size:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  main{max-width:1280px;margin:0 auto;padding:16px 20px 50px;}
+  .panel{background:var(--panel);border:1px solid var(--line-strong);padding:14px 16px;}
+  h3.panel-title{font-size:13.5px;font-weight:600;margin-bottom:2px;}
+  .panel-sub{font-size:11.5px;color:var(--ink-muted);margin-bottom:10px;}
+
+  .controls{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;}
+  .controls .field{display:flex;flex-direction:column;gap:3px;}
+  .controls label{font-size:11px;color:var(--ink-muted);}
+  select{font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;border:1px solid var(--line-strong);padding:6px 9px;background:#fff;color:var(--ink);max-width:340px;}
+  .check{display:flex;align-items:center;gap:6px;font-size:12.5px;padding-bottom:6px;}
+
+  .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px;}
+  @media(max-width:700px){.kpis{grid-template-columns:1fr;}}
+  .kpi .label{font-size:11.5px;color:var(--ink-muted);}
+  .kpi .value{font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:600;margin-top:3px;}
+  .kpi .note{font-size:11.5px;color:var(--ink-muted);margin-top:4px;}
+
+  /* ---- matriz ---- */
+  .tablewrap{overflow-x:auto;}
+  table.matriz{border-collapse:separate;border-spacing:0;font-size:12px;width:max-content;min-width:100%;}
+  table.matriz th, table.matriz td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:3px 2px;}
+  table.matriz thead th{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;color:var(--ink-muted);text-align:center;background:var(--panel);position:sticky;top:0;z-index:2;line-height:1.25;border-bottom:1px solid var(--line-strong);}
+  table.matriz thead th small{display:block;font-size:9px;color:var(--line-strong);}
+  th.nombre{position:sticky;left:0;z-index:1;background:var(--panel);text-align:left;font-family:'IBM Plex Sans',sans-serif;font-weight:500;font-size:12px;padding:4px 8px;min-width:190px;max-width:230px;border-right:1px solid var(--line-strong);}
+  thead th.nombre{z-index:3;color:var(--ink-muted);font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:11px;}
+  th.nombre small{display:block;font-size:10.5px;color:var(--ink-muted);font-weight:400;}
+  td.cell{min-width:60px;text-align:center;vertical-align:top;font-family:'IBM Plex Mono',monospace;font-size:10px;}
+  td.cell div{line-height:1.35;white-space:nowrap;}
+  td.vacio{background:transparent;}
+  td.fin{background:#EEF1F0;}
+  td.c-serv{background:var(--steel-soft);color:var(--ink);}
+  td.c-obra{background:var(--sage-soft);color:var(--ink);}
+  td.c-mix{background:var(--amber-soft);color:var(--ink);}
+  td.total{font-family:'IBM Plex Mono',monospace;font-weight:600;text-align:center;min-width:52px;background:var(--panel);}
+  thead th.total{min-width:52px;}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--ink-muted);margin-top:10px;align-items:center;}
+  .legend .sw{display:inline-block;width:12px;height:12px;vertical-align:middle;margin-right:5px;border:1px solid var(--line-strong);}
+
+  table.lista{width:100%;border-collapse:collapse;font-size:12px;}
+  table.lista th, table.lista td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);}
+  table.lista th{font-family:'Space Grotesk',sans-serif;font-size:11px;color:var(--ink-muted);border-bottom:1px solid var(--line-strong);}
+  .callout{border-left:3px solid var(--amber);background:var(--amber-soft);padding:9px 12px;font-size:12px;margin-top:10px;}
+  .tag{display:inline-block;font-size:10px;font-family:'IBM Plex Mono',monospace;border:1px solid var(--amber);color:#7A5B1E;background:var(--amber-soft);padding:1px 6px;}
+  #errorApp{color:var(--ember);font-size:12.5px;margin:0 0 10px;}
+
+  @media print{
+    @page{size:landscape;margin:10mm;}
+    body{background:#fff;font-size:11px;}
+    .topbar button, .controls, #gate, .legend + .callout{display:none !important;}
+    .tablewrap{overflow:visible;}
+    th.nombre{position:static;min-width:150px;}
+    thead th{position:static;}
+    td.cell{min-width:0;}
+  }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <div class="panel">
+    <h1>Asistencia del personal</h1>
+    <p>Acceso restringido — esta vista muestra nombres de personal y las obras/servicios donde trabajó cada día.</p>
+    <div class="row">
+      <input type="password" id="pin" placeholder="PIN" autocomplete="off">
+      <button class="primary" id="btnEntrar">Entrar</button>
+    </div>
+    <div id="gateMsg"></div>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <div class="topbar"><div class="topbar-inner">
+    <h1>Asistencia del personal</h1>
+    <span class="sub"><span id="meta">—</span>
+      <button class="ghost" id="btnRefrescar">↻ actualizar</button>
+      <button class="ghost" id="btnCsv">⬇ CSV del mes</button>
+      <button class="ghost" id="btnSalir">salir</button></span>
+  </div></div>
+  <main>
+    <div id="errorApp" hidden></div>
+    <div class="controls">
+      <div class="field"><label>Mes</label><select id="selMes"></select></div>
+      <div class="field"><label>OT</label><select id="selOT"></select></div>
+      <label class="check"><input type="checkbox" id="chkSolo" checked> Ocultar quienes no tienen registro</label>
+    </div>
+    <div class="kpis">
+      <div class="panel kpi"><div class="label">Colaboradores con registro</div><div class="value" id="kpiPers">—</div><div class="note" id="kpiPersNote"></div></div>
+      <div class="panel kpi"><div class="label">Días-persona registrados</div><div class="value" id="kpiDias">—</div><div class="note">Un día con registro = 1, sin importar en cuántas OT trabajó.</div></div>
+      <div class="panel kpi"><div class="label">Por revisar en el mes</div><div class="value" id="kpiRev">—</div><div class="note">Registros que no se pudieron atar con certeza (abajo).</div></div>
+    </div>
+    <div class="panel">
+      <h3 class="panel-title" id="tituloMatriz">Matriz</h3>
+      <div class="panel-sub">Cada celda muestra la OT donde esa persona tuvo registro ese día. Pasa el cursor sobre una celda para ver el cliente/obra.</div>
+      <div class="tablewrap" id="matriz"></div>
+      <div class="legend">
+        <span><span class="sw" style="background:var(--steel-soft)"></span>Servicio (póliza)</span>
+        <span><span class="sw" style="background:var(--sage-soft)"></span>Obra</span>
+        <span><span class="sw" style="background:var(--amber-soft)"></span>Servicio y obra el mismo día</span>
+        <span><span class="sw" style="background:#EEF1F0"></span>Fin de semana</span>
+        <span>"s/OT" = el cliente u obra todavía no tiene OT capturada</span>
+      </div>
+      <div class="callout">Sólo cuentan servicios en estado <b>CERRADO</b> y sesiones de avance <b>AUTORIZADO</b>, y sólo registros a partir del <span id="desde">—</span>. Un renglón vacío significa que esa persona no tiene ningún registro en la selección — no que no haya trabajado.</div>
+    </div>
+    <div class="panel" style="margin-top:12px;">
+      <h3 class="panel-title">Por revisar</h3>
+      <div class="panel-sub">Nada de esto se cuenta en la matriz ni se descarta en silencio: corrígelo en la hoja de origen y se acomoda solo en la siguiente actualización.</div>
+      <div class="tablewrap" id="revisar"></div>
+    </div>
+  </main>
+</div>
+
+<script>
+const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwD_qXXjYenWoe0DWpEG_EZbxOr5nunyy0yE0kgd14Yd7sGBPG_E_sfQVoDviUKZ4w/exec';
+const SIN_OT = '__SIN_OT__';
+const LETRAS = ['D','L','M','M','J','V','S'];
+const esc = (s) => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const $ = (id) => document.getElementById(id);
+
+let PIN = '', DATA = null;
+
+async function cargar(pin){
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 20000);
+  try{
+    const r = await fetch(`${ENDPOINT}?vista=asistencia&pin=${encodeURIComponent(pin)}`, {signal: ctrl.signal});
+    if(!r.ok) throw new Error('El servidor respondió con estado ' + r.status);
+    const data = await r.json();
+    if(data.error) throw new Error(data.error);
+    return data;
+  }catch(err){
+    if(err.name === 'AbortError') throw new Error('Tiempo de espera agotado (20 s).');
+    throw err;
+  }finally{ clearTimeout(to); }
+}
+
+async function entrar(pin, silencioso){
+  if(!pin){ $('gateMsg').textContent = 'Ingresa el PIN.'; return; }
+  $('btnEntrar').disabled = true;
+  if(!silencioso) $('gateMsg').textContent = 'Verificando…';
+  try{
+    DATA = await cargar(pin);
+    PIN = pin;
+    try{ sessionStorage.setItem('asist_pin', pin); }catch(e){}
+    $('gate').hidden = true; $('app').hidden = false;
+    $('gateMsg').textContent = '';
+    iniciarControles();
+  }catch(err){
+    $('gateMsg').textContent = err.message;
+  }finally{ $('btnEntrar').disabled = false; }
+}
+
+async function refrescar(){
+  $('btnRefrescar').disabled = true;
+  try{
+    DATA = await cargar(PIN);
+    $('errorApp').hidden = true;
+    iniciarControles(true);
+  }catch(err){
+    $('errorApp').hidden = false; $('errorApp').textContent = 'No se pudo actualizar: ' + err.message;
+  }finally{ $('btnRefrescar').disabled = false; }
+}
+
+function salir(){
+  PIN = ''; DATA = null;
+  try{ sessionStorage.removeItem('asist_pin'); }catch(e){}
+  $('app').hidden = true; $('gate').hidden = false; $('pin').value = '';
+}
+
+const fechaLarga = (ymd) => { const [y,m,d] = ymd.split('-').map(Number); return new Date(y, m-1, d).toLocaleDateString('es-MX', {day:'numeric', month:'long', year:'numeric'}); };
+const nombreMes = (ym) => { const [y,m] = ym.split('-').map(Number); const s = new Date(y, m-1, 1).toLocaleDateString('es-MX', {month:'long', year:'numeric'}); return s.charAt(0).toUpperCase() + s.slice(1); };
+
+function iniciarControles(conservar){
+  const meses = DATA.meses || [];
+  const mesPrev = conservar ? $('selMes').value : '';
+  $('selMes').innerHTML = meses.map(m => `<option value="${m}">${nombreMes(m)}</option>`).join('');
+  $('selMes').value = (mesPrev && meses.includes(mesPrev)) ? mesPrev : meses[meses.length-1];
+  $('desde').textContent = fechaLarga(DATA.desde);
+  $('meta').textContent = 'actualizado: ' + new Date(DATA.generado).toLocaleString('es-MX');
+  actualizarOT(conservar ? $('selOT').value : '');
+  render();
+}
+
+function actualizarOT(previo){
+  const mes = $('selMes').value;
+  const porOT = new Map();
+  DATA.registros.filter(r => r.fecha.startsWith(mes)).forEach(r => {
+    const k = r.ot || SIN_OT;
+    if(!porOT.has(k)) porOT.set(k, r.ubicacion);
+  });
+  const claves = [...porOT.keys()].sort((a,b) => a === SIN_OT ? 1 : b === SIN_OT ? -1 : a.localeCompare(b));
+  $('selOT').innerHTML = '<option value="">Todas las OT</option>' +
+    claves.map(k => `<option value="${esc(k)}">${k === SIN_OT ? 'Sin OT' : esc(k) + ' — ' + esc(porOT.get(k))}</option>`).join('');
+  $('selOT').value = claves.includes(previo) ? previo : '';
+}
+
+function construirIndice(){
+  const mes = $('selMes').value, ot = $('selOT').value;
+  const [y, m] = mes.split('-').map(Number);
+  const nDias = new Date(y, m, 0).getDate();
+  const pasa = (r) => !ot || (ot === SIN_OT ? !r.ot : r.ot === ot);
+  const idx = new Map();
+  DATA.registros.filter(r => r.fecha.startsWith(mes) && pasa(r)).forEach(r => {
+    const dia = Number(r.fecha.slice(8,10));
+    if(!idx.has(r.colaborador)) idx.set(r.colaborador, new Map());
+    const porDia = idx.get(r.colaborador);
+    if(!porDia.has(dia)) porDia.set(dia, new Map());
+    const porOT = porDia.get(dia);
+    if(!porOT.has(r.ot)) porOT.set(r.ot, {ubic: new Set(), orig: new Set()});
+    const o = porOT.get(r.ot); o.ubic.add(r.ubicacion); o.orig.add(r.origen);
+  });
+  return {mes, ot, y, m, nDias, idx};
+}
+
+function render(){
+  if(!DATA) return;
+  const {mes, y, m, nDias, idx} = construirIndice();
+  const solo = $('chkSolo').checked;
+  const dias = Array.from({length: nDias}, (_, i) => i + 1);
+  const dow = (d) => new Date(y, m-1, d).getDay();
+  const esFin = (d) => dow(d) === 0 || dow(d) === 6;
+
+  const cab = dias.map(d => `<th class="${esFin(d)?'fin':''}">${d}<small>${LETRAS[dow(d)]}</small></th>`).join('');
+  let conReg = 0, diasPersona = 0;
+  const filas = DATA.colaboradores.map(c => {
+    const porDia = idx.get(c.nombre) || new Map();
+    const total = porDia.size;
+    if(total){ conReg++; diasPersona += total; }
+    if(solo && !total) return '';
+    const celdas = dias.map(d => {
+      const p = porDia.get(d);
+      const fin = esFin(d) ? ' fin' : '';
+      if(!p) return `<td class="cell vacio${fin}"></td>`;
+      const origs = new Set(); p.forEach(o => o.orig.forEach(x => origs.add(x)));
+      const clase = origs.size > 1 ? 'c-mix' : origs.has('Servicio') ? 'c-serv' : 'c-obra';
+      const lineas = [...p.entries()].map(([ot, o]) =>
+        `<div title="${esc([...o.ubic].join(' · ') + ' — ' + [...o.orig].join(' + '))}">${ot ? esc(ot) : 's/OT'}</div>`).join('');
+      return `<td class="cell ${clase}">${lineas}</td>`;
+    }).join('');
+    return `<tr><th class="nombre" scope="row">${esc(c.nombre)}${c.puesto ? `<small>${esc(c.puesto)}</small>` : ''}</th>${celdas}<td class="total">${total || '—'}</td></tr>`;
+  }).join('');
+
+  $('tituloMatriz').textContent = 'Matriz — ' + nombreMes(mes) + ($('selOT').value ? ' · ' + ($('selOT').value === SIN_OT ? 'Sin OT' : 'OT ' + $('selOT').value) : '');
+  $('matriz').innerHTML = DATA.colaboradores.length
+    ? `<table class="matriz"><thead><tr><th class="nombre">Colaborador</th>${cab}<th class="total">Días</th></tr></thead><tbody>${filas || `<tr><td colspan="${nDias+2}" style="padding:12px;">Nadie tiene registro con estos filtros.</td></tr>`}</tbody></table>`
+    : '<div class="callout">CAT_PUESTOS no tiene colaboradores — revisa la columna "Colaborador".</div>';
+
+  // Sólo se cuenta a quien tiene registro: CAT_PUESTOS incluye puestos corporativos que nunca
+  // aparecen aquí, así que un "X de N" contra todo el catálogo no significaría nada.
+  $('kpiPers').textContent = conReg;
+  $('kpiPersNote').textContent = 'En el mes y la OT seleccionados.';
+  $('kpiDias').textContent = diasPersona;
+
+  // Lo que no tiene fecha, o tiene una fecha posterior al último mes del selector (error de
+  // captura), se muestra en el mes más reciente — si no, no habría ningún mes donde verlo.
+  const ultimo = (DATA.meses || [])[(DATA.meses || []).length - 1];
+  const rev = (DATA.por_revisar || []).filter(x => !x.fecha || x.fecha.startsWith(mes) || (mes === ultimo && x.fecha.slice(0, 7) > ultimo));
+  $('kpiRev').textContent = rev.length;
+  $('revisar').innerHTML = rev.length
+    ? `<table class="lista"><thead><tr><th>Qué pasa</th><th>Fecha</th><th>Origen</th><th>Referencia</th><th>Detalle</th></tr></thead><tbody>${
+        rev.map(x => `<tr><td><span class="tag">${esc(x.tipo)}</span></td><td>${x.fecha ? esc(x.fecha) : '—'}</td><td>${esc(x.origen)}</td><td style="font-family:'IBM Plex Mono',monospace;font-size:11px;">${esc(x.referencia)}</td><td>${esc(x.detalle)}</td></tr>`).join('')
+      }</tbody></table>`
+    : '<div class="panel-sub" style="margin:0;">Nada por revisar este mes.</div>';
+}
+
+function exportarCSV(){
+  if(!DATA) return;
+  const {mes, ot, y, m, nDias, idx} = construirIndice();
+  const celdaCSV = (porOT) => porOT ? [...porOT.entries()].map(([k, o]) => k || ('s/OT: ' + [...o.ubic].join(' · '))).join(' / ') : '';
+  const q = (v) => { v = String(v == null ? '' : v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const dias = Array.from({length: nDias}, (_, i) => i + 1);
+  const cab = ['Colaborador', 'Puesto', ...dias.map(d => `${mes}-${String(d).padStart(2,'0')}`), 'Días con registro'];
+  const soloConRegistro = $('chkSolo').checked;
+  const filas = DATA.colaboradores
+    .filter(c => !soloConRegistro || (idx.get(c.nombre) && idx.get(c.nombre).size))
+    .map(c => {
+      const porDia = idx.get(c.nombre) || new Map();
+      return [c.nombre, c.puesto, ...dias.map(d => celdaCSV(porDia.get(d))), porDia.size];
+    });
+  const csv = '\uFEFF' + [cab, ...filas].map(f => f.map(q).join(',')).join('\r\n');
+  const blob = new Blob([csv], {type: 'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `asistencia_${mes}${ot ? '_' + (ot === SIN_OT ? 'sinOT' : ot.replace(/[^0-9A-Za-z]+/g, '-')) : ''}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  $('btnEntrar').addEventListener('click', () => entrar($('pin').value.trim()));
+  $('pin').addEventListener('keydown', (e) => { if(e.key === 'Enter') entrar($('pin').value.trim()); });
+  $('btnRefrescar').addEventListener('click', refrescar);
+  $('btnSalir').addEventListener('click', salir);
+  $('btnCsv').addEventListener('click', exportarCSV);
+  $('selMes').addEventListener('change', () => { actualizarOT(''); render(); });
+  $('selOT').addEventListener('change', render);
+  $('chkSolo').addEventListener('change', render);
+  let guardado = ''; try{ guardado = sessionStorage.getItem('asist_pin') || ''; }catch(e){}
+  if(guardado) entrar(guardado, true); else $('pin').focus();
+});
+</script>
+</body>
+</html>
