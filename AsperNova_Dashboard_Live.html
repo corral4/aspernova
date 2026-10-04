@@ -41,6 +41,7 @@
   main{max-width:1180px;margin:0 auto;padding:18px 20px 60px;}
   .sheet{display:none;}
   .sheet.active{display:block;}
+  #frameAsistencia{width:100%;height:calc(100vh - 150px);min-height:560px;border:1px solid var(--line-strong);background:var(--paper);display:block;}
   .page-head{margin-bottom:14px;}
   .page-head h2{font-size:20px;font-weight:600;}
   .page-head p{color:var(--ink-muted);font-size:13px;margin-top:4px;max-width:74ch;}
@@ -144,6 +145,7 @@
       <button data-page="p5"><span class="n">05</span>PPTO vs Real</button>
       <button data-page="p6"><span class="n">06</span>Captura diaria</button>
       <button data-page="p7"><span class="n">07</span>Flujo de efectivo</button>
+      <button data-page="p8"><span class="n">08</span>Asistencia</button>
     </nav>
   </div>
 </div>
@@ -156,6 +158,9 @@
   <section id="p5" class="sheet"></section>
   <section id="p6" class="sheet"></section>
   <section id="p7" class="sheet"></section>
+  <section id="p8" class="sheet">
+    <iframe id="frameAsistencia" title="Asistencia del personal" data-src="AsperNova_Asistencia.html"></iframe>
+  </section>
 </main>
 
 <footer>Datos en vivo desde Google Sheets vía Apps Script · el respaldo se recalcula cada ~30 min · este documento no sustituye la revisión con el equipo de obra antes de decisiones de financiamiento.</footer>
@@ -219,6 +224,10 @@ document.addEventListener('DOMContentLoaded', () => {
       navBtn.classList.add('active');
       const target = navBtn.getAttribute('data-page');
       document.querySelectorAll('.sheet').forEach(s=>s.classList.toggle('active', s.id===target));
+      if(target === 'p8'){
+        const fr = document.getElementById('frameAsistencia');
+        if(fr && !fr.getAttribute('src')) fr.setAttribute('src', fr.getAttribute('data-src'));
+      }
       window.scrollTo({top:0, behavior:'smooth'});
     }
   });
