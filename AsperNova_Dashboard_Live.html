@@ -176,6 +176,25 @@ const esc = (s) => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<
 
 let DATA = null;
 
+// Obra seleccionada, compartida por todas las pestañas: cambiar el filtro en una lo cambia
+// en todas. '' = todo el portafolio. Una pestaña que no tenga esa obra en su propia lista
+// (p. ej. PPTO vs Real, que sólo lista obras con conceptos capturados) lo avisa en pantalla
+// en vez de mostrar otra obra en silencio.
+let OBRA_SEL = '';
+function setObraSel(valor){
+  OBRA_SEL = valor || '';
+  renderResumen();
+  renderGasto();
+  renderConceptosPagina();
+  renderFlujoEfectivo();
+}
+function nombreObraSel(){
+  if(!OBRA_SEL) return '';
+  const o = (DATA.obras||[]).find(x=>x.id_obra===OBRA_SEL)
+         || (DATA.obras_sin_mapear||[]).find(x=>x.id_obra===OBRA_SEL);
+  return o ? o.nombre_obra : OBRA_SEL;
+}
+
 // ============ CARGA DE DATOS ============
 // Confirmado: el endpoint responde con Access-Control-Allow-Origin: *, así que
 // un fetch() directo funciona sin rodeos (no hace falta JSONP).
@@ -232,10 +251,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
   document.body.addEventListener('change', (e) => {
-    if(e.target.id === 'filtroObraConceptos'){ renderConceptosTabla(e.target.value); renderMaterialesObra(e.target.value); }
-    if(e.target.id === 'filtroObraResumen') renderResumen(e.target.value);
-    if(e.target.id === 'filtroObraGasto') renderGasto(e.target.value);
-    if(e.target.id === 'filtroObraFlujo') renderFlujoEfectivo(e.target.value);
+    // Todos los filtros de obra son el mismo filtro: cambiar uno re-dibuja las demás pestañas.
+    if(['filtroObraResumen','filtroObraGasto','filtroObraConceptos','filtroObraFlujo'].includes(e.target.id)) setObraSel(e.target.value);
   });
 });
 
@@ -252,8 +269,30 @@ function renderTodo(){
 }
 
 // ============ 01 RESUMEN ============
+// Dos cuadros: lo cobrado y lo que sigue pendiente. Van en base CON IVA porque el saldo de
+// la hoja Cobranza es el del documento completo; se etiqueta para que nadie los sume con el
+// margen o la compra, que van sin IVA.
+function kpiCobranza_(facturadoConIva, pendiente, cobrado, pct, nota){
+  if(!facturadoConIva){
+    return `<div class="panel kpi"><div class="label">Cobranza</div><div class="value">—</div><div class="note">Esta selección todavía no tiene facturas emitidas.</div></div>`;
+  }
+  const alerta = pct != null && pct < 0.5;
+  return `
+    <div class="panel kpi">
+      <div class="label">Cobrado sobre lo facturado <span class="mono" style="font-size:10px;">(con IVA)</span></div>
+      <div class="value">${fmtPct(pct)}</div>
+      <div class="note">${fmtMoney.format(cobrado||0)} cobrado de ${fmtMoney.format(facturadoConIva)} facturado.</div>
+      ${alerta?'<span class="tag alerta">menos de la mitad cobrada</span>':'<span class="tag ok">al corriente</span>'}
+    </div>
+    <div class="panel kpi">
+      <div class="label">Pendiente de cobro <span class="mono" style="font-size:10px;">(con IVA)</span></div>
+      <div class="value">${fmtMoney.format(pendiente||0)}</div>
+      <div class="note">${nota||''}</div>
+    </div>`;
+}
+
 function renderResumen(obraId){
-  obraId = obraId || '';
+  obraId = (obraId === undefined || obraId === null) ? OBRA_SEL : obraId;
   const obras = DATA.obras || [];
   const r = DATA.resumen || {};
   const opciones = opcionesFiltroObra_(obraId, true);
@@ -270,7 +309,11 @@ function renderResumen(obraId){
         <div class="panel kpi"><div class="label">Facturado real acumulado</div><div class="value">${fmtMoney.format(r.facturado_real_total||0)}</div><div class="note">${fmtPct((r.facturado_real_total||0)/(r.monto_contrato_total||1))} del monto contratado.</div></div>
         <div class="panel kpi"><div class="label">Margen a contrato (portafolio)</div><div class="value">${fmtMoney.format(r.margen_contrato_total||0)}</div><div class="note">Monto Total Contrato − Compra real − Nómina prorrateada.</div></div>
       </div>
-      <div class="grid cols-2" style="margin-top:11px;">
+      <div class="grid" style="margin-top:11px;">
+        ${kpiCobranza_(r.facturado_con_iva_total, r.cobranza_pendiente_total, r.cobrado_total, r.pct_cobrado_total,
+            `${r.cobranza_folios_pendientes||0} factura(s) pendiente(s)` +
+            (r.cobranza_vencida_total>0 ? ` · ${fmtMoney.format(r.cobranza_vencida_total)} ya vencido` : '') +
+            (r.cobranza_pendiente_sin_obra>0 ? ` · ${fmtMoney.format(r.cobranza_pendiente_sin_obra)} sin obra identificada` : ''))}
         <div class="panel kpi"><div class="label">Obras con margen a contrato negativo</div><div class="value">${margenNeg.length}</div><div class="note">${margenNeg.map(o=>esc(o.nombre_obra)).join(', ') || 'ninguna'}</div>${margenNeg.length? '<span class="tag alerta">revisar</span>':'<span class="tag ok">sin alerta</span>'}</div>
         <div class="panel kpi"><div class="label">Obras facturadas sobre el 100% del contrato</div><div class="value">${sobrefacturadas.length}</div><div class="note">${sobrefacturadas.map(o=>esc(o.nombre_obra)).join(', ') || 'ninguna'}</div>${sobrefacturadas.length? '<span class="tag alerta">revisar</span>':'<span class="tag ok">sin alerta</span>'}</div>
       </div>
@@ -292,6 +335,9 @@ function renderResumen(obraId){
           <div class="panel kpi"><div class="label">Facturado real</div><div class="value">${fmtMoney.format(o.facturado_real)}</div></div>
           <div class="panel kpi"><div class="label">Margen</div><div class="value">—</div><div class="note">No disponible sin Monto Total Contrato.</div></div>
         </div>
+        <div class="grid cols-3" style="margin-top:11px;">
+          ${kpiCobranza_(o.facturado_con_iva, o.cobranza_pendiente, o.cobrado, o.pct_cobrado, `${o.folios_pendientes||0} factura(s) pendiente(s) de esta OT.`)}
+        </div>
       `;
     }
   } else {
@@ -305,9 +351,9 @@ function renderResumen(obraId){
           <div class="panel kpi"><div class="label">Facturado real</div><div class="value">${fmtMoney.format(o.facturado_real)}</div><div class="note">${fmtPct(o.pct_facturado_contrato)} del contrato.</div></div>
           <div class="panel kpi"><div class="label">Nómina prorrateada acumulada</div><div class="value">${fmtMoney.format(o.nomina_prorrateada_acumulada)}</div></div>
         </div>
-        <div class="grid cols-2" style="margin-top:11px;">
+        <div class="grid cols-3" style="margin-top:11px;">
           <div class="panel kpi"><div class="label">Margen a contrato</div><div class="value">${fmtMoney.format(o.margen_contrato)}</div>${o.margen_contrato<0?'<span class="tag alerta">revisar</span>':'<span class="tag ok">sin alerta</span>'}</div>
-          <div class="panel kpi"><div class="label">Avance devengado</div><div class="value">${o.ingreso_devengado>0?fmtMoney.format(o.ingreso_devengado):'—'}</div><div class="note">${o.ingreso_devengado>0? 'Margen devengado: '+fmtMoney.format(o.margen_devengado) : 'Sin avances capturados todavía en esta obra.'}</div></div>
+          ${kpiCobranza_(o.facturado_con_iva, o.cobranza_pendiente, o.cobrado, o.pct_cobrado, `${o.folios_pendientes||0} factura(s) pendiente(s) de esta obra.`)}
         </div>
       `;
     }
@@ -428,7 +474,7 @@ function opcionesFiltroObra_(obraIdActual, incluirSinMapear){
 }
 
 function renderGasto(obraId){
-  obraId = obraId || '';
+  obraId = (obraId === undefined || obraId === null) ? OBRA_SEL : obraId;
   const rowsCat = DATA.gasto_por_categoria || [];
   const rowsProv = DATA.gasto_por_proveedor || [];
   const rowsSC = DATA.gasto_sin_clasificar || [];
@@ -545,7 +591,14 @@ function renderNomina(){
 function renderConceptosPagina(){
   const conceptos = DATA.conceptos||[];
   const obrasUnicas = [...new Map(conceptos.map(c=>[c.id_obra, c.nombre_obra])).entries()];
-  const opciones = obrasUnicas.map(([id,nombre])=>`<option value="${esc(id)}">${esc(nombre)}</option>`).join('');
+  // Esta pestaña sólo puede mostrar obras con conceptos capturados. Si el filtro global
+  // apunta a otra (o a "todo el portafolio"), cae a la primera de la lista y lo dice.
+  const hayGlobal = OBRA_SEL && obrasUnicas.some(([id])=>id===OBRA_SEL);
+  const elegida = hayGlobal ? OBRA_SEL : (obrasUnicas.length ? obrasUnicas[0][0] : '');
+  const aviso = (OBRA_SEL && !hayGlobal && obrasUnicas.length)
+    ? `<div class="callout">El filtro está en <b>${esc(nombreObraSel())}</b>, pero esa obra no tiene conceptos capturados en <span class="mono">2_Catalogo_Conceptos</span>, así que aquí se muestra otra. Las demás pestañas sí respetan el filtro.</div>`
+    : '';
+  const opciones = obrasUnicas.map(([id,nombre])=>`<option value="${esc(id)}" ${id===elegida?'selected':''}>${esc(nombre)}</option>`).join('');
 
   document.getElementById('p5').innerHTML = `
     <div class="page-head">
@@ -554,6 +607,7 @@ function renderConceptosPagina(){
     </div>
     <div class="panel span-4">
       <div class="filtro-row"><label>Obra: </label><select id="filtroObraConceptos">${opciones}</select></div>
+      ${aviso}
       <div id="tablaConceptos"></div>
       <div class="callout">"Costo real" y "Margen devengado" salen de cruzar el material que se usó en cada avance (columna Descripcion Material de 3_Avances_Diarios) contra lo comprado de ese material en esa misma obra. Si un concepto no tiene ningún avance capturado todavía, estas columnas quedan en blanco — no en cero, para no confundir "sin dato" con "sin costo".</div>
     </div>
@@ -565,8 +619,8 @@ function renderConceptosPagina(){
     </div>
   `;
   if(obrasUnicas.length){
-    renderConceptosTabla(obrasUnicas[0][0]);
-    renderMaterialesObra(obrasUnicas[0][0]);
+    renderConceptosTabla(elegida);
+    renderMaterialesObra(elegida);
   }
 }
 
@@ -721,7 +775,14 @@ async function guardarSupuestos(){
 
 // ============ 07 FLUJO DE EFECTIVO ============
 function renderFlujoEfectivo(obraId){
-  obraId = obraId || '';
+  obraId = (obraId === undefined || obraId === null) ? OBRA_SEL : obraId;
+  // El flujo por obra sólo existe para obras de 1_Obras; una OT sin mapear no tiene
+  // proyección propia, así que esta pestaña se queda en portafolio y lo avisa.
+  const flujoTieneObra = obraId && ((DATA.flujo_efectivo||{}).por_obra||[]).some(p=>p.id_obra===obraId);
+  const avisoFlujo = (obraId && !flujoTieneObra)
+    ? `<div class="callout">El filtro está en <b>${esc(nombreObraSel())}</b>, que no tiene proyección de flujo propia (sólo las obras de <span class="mono">1_Obras</span> con contrato y fechas la tienen). Aquí se muestra el portafolio completo.</div>`
+    : '';
+  if(obraId && !flujoTieneObra) obraId = '';
   const fe = DATA.flujo_efectivo || {supuestos:{}, meses:[], por_obra:[], compras_unicas:[], obras_sin_dias_cliente:[]};
   const s = fe.supuestos || {};
 
@@ -770,8 +831,21 @@ function renderFlujoEfectivo(obraId){
 
   const sinDias = fe.obras_sin_dias_cliente || [];
   const sinObra = fe.cobranza_sin_obra || [];
-  const filasSinObra = sinObra.map(item=>`
-    <tr><td>${esc(item.serie_folio)}</td><td>${esc(item.cliente)}</td><td class="num">${fmtMoney.format(item.monto)}</td><td>${item.mes_cobro}</td><td>${item.ot?esc(item.ot):'—'}</td></tr>
+  // Detalle de cobranza: una fila por factura pendiente, con la fecha en que se estima el
+  // cobro y por qué. Respeta el filtro de obra; las facturas sin obra identificada sólo
+  // aparecen en la vista de portafolio.
+  const cobDet = (fe.cobranza_detalle || []).filter(x => !obraId || x.id_obra === obraId);
+  const cobTot = cobDet.reduce((s,x)=>s+(x.monto||0),0);
+  const filasCob = cobDet.map(item=>`
+    <tr class="${item.vencida?'alerta':''}">
+      <td class="mono">${esc(item.serie_folio)}</td>
+      <td>${esc(item.cliente)}</td>
+      <td>${item.nombre_obra ? esc(item.nombre_obra) : '<span style="color:var(--ember);">sin obra identificada</span>'}</td>
+      <td class="num">${fmtMoney.format(item.monto)}</td>
+      <td>${item.fecha_vencimiento || '—'}</td>
+      <td><b>${item.fecha_pago_estimada || '—'}</b></td>
+      <td style="font-size:11px;color:var(--ink-muted);">${esc(item.regla)}${item.dias_vencido?` (${item.dias_vencido} días)`:''}</td>
+    </tr>
   `).join('');
 
   document.getElementById('p7').innerHTML = `
@@ -786,17 +860,22 @@ function renderFlujoEfectivo(obraId){
       <div class="formrow">
         <div class="field"><label>Factor de costo (%)</label><input type="number" id="inputFactorCosto" value="${((s.factor_costo_default||0)*100).toFixed(1)}" step="0.5"></div>
         <div class="field"><label>Otros gastos + impuestos ($/mes)</label><input type="number" id="inputOtrosGastos" value="${s.otros_gastos_e_impuestos_mensual||0}" step="1000"></div>
-        <div class="field"><label>% Facturación mensual</label><input type="number" id="inputPctFacturacion" value="${((s.pct_facturacion_mensual||0)*100).toFixed(1)}" step="1"></div>
+        <div class="field"><label>% Facturación mensual <span class="mono" style="font-size:10px;">(default)</span></label><input type="number" id="inputPctFacturacion" value="${((s.pct_facturacion_mensual||0)*100).toFixed(1)}" step="1"></div>
         <div class="field"><label>Ingresos por servicios ($/mes)</label><input type="number" id="inputIngresosServicios" value="${s.ingresos_servicios_mensual||0}" step="1000"></div>
         <div class="field"><label>Saldo inicial caja + bancos ($)</label><input type="number" id="inputSaldoInicial" value="${s.saldo_inicial_caja||0}" step="10000"></div>
         <div class="field"><label>PIN</label><input type="password" id="pinSupuestos" placeholder="····"></div>
         <button id="btnGuardarSupuestos">Guardar y recalcular</button>
       </div>
       <div id="mensajeSupuestos"></div>
-      <div class="panel-sub" style="margin-top:8px;">Saldo inicial ${avisoSaldo} — actualízalo cada mes con tu saldo real de caja y bancos para que la proyección arranque del punto correcto. "Ingresos por servicios" son las pólizas/mantenimientos — un ingreso fijo mensual aparte de las obras. Nómina proyectada: ${fmtMoney.format(s.nomina_mensual_proyectada||0)}/mes (del último mes real: ${s.mes_base_nomina||'—'}). Excepciones de factor de costo por obra y por cliente se editan en Sheets.</div>
+      <div class="panel-sub" style="margin-top:8px;">Saldo inicial ${avisoSaldo} — actualízalo cada mes con tu saldo real de caja y bancos para que la proyección arranque del punto correcto. "Ingresos por servicios" son las pólizas/mantenimientos — un ingreso fijo mensual aparte de las obras. Nómina proyectada: ${fmtMoney.format(s.nomina_mensual_proyectada||0)}/mes (del último mes real: ${s.mes_base_nomina||'—'}). ${
+  ((fe.obras_con_curva||[]).length || (fe.clientes_con_curva||[]).length)
+    ? `El % de facturación de arriba es sólo el <b>default</b>: ${(fe.obras_con_curva||[]).length} obra(s) y ${(fe.clientes_con_curva||[]).length} cliente(s) ya tienen curva mensual propia capturada en Sheets y no usan ese número.`
+    : 'El % de facturación aplica a todas las obras por igual; para una curva mes a mes por obra o por cliente, se captura en Sheets.'
+} Excepciones de factor de costo por obra y por cliente también se editan en Sheets.</div>
     </div>
 
     <div class="filtro-row" style="margin-top:11px;"><label>Ver: </label><select id="filtroObraFlujo">${opciones}</select></div>
+    ${avisoFlujo}
     ${obraId ? '<div class="callout">Vista de una sola obra: muestra sólo lo que esa obra aporta o consume (material, compra única, sus propios cobros) — no incluye el saldo inicial ni la nómina/otros gastos, que son de toda la empresa, no de una obra en particular. Una vez que la Fecha Fin Programada de la obra pasa, su línea deja de moverse y se queda fija.</div>' : ''}
 
     <div class="grid cols-3" style="margin-top:11px;">
@@ -810,15 +889,14 @@ function renderFlujoEfectivo(obraId){
       <div id="chartFlujo"></div>
     </div>
 
-    ${!obraId && sinObra.length ? `
     <div class="panel span-4" style="margin-top:11px;">
-      <h3 class="panel-title">Cobranza pendiente sin obra identificada (${sinObra.length})</h3>
-      <div class="panel-sub">Folios de la hoja Cobranza que sí cuentan en el total del portafolio de arriba, pero cuyo folio no apareció en Ventas (ej. saldos iniciales de clientes) o cuya OT no está mapeada en 1_Obras — por eso no se les puede atar a una obra específica.</div>
+      <h3 class="panel-title">Cobranza pendiente — ${cobDet.length} factura(s) · ${fmtMoney.format(cobTot)} <span class="mono" style="font-size:11px;font-weight:400;">(con IVA)</span></h3>
+      <div class="panel-sub">Facturas de la hoja Cobranza que siguen sin cobrarse. Una factura de Ventas que NO aparece en Cobranza se da por cobrada y no entra aquí. Si la Fecha Vencimiento ya pasó, el cobro se estima a hoy + ${fe.dias_cobro_factura_vencida||15} días (fila marcada en rojo).${sinObra.length && !obraId ? ` Hay ${sinObra.length} factura(s) cuyo folio no apareció en Ventas: cuentan en el total pero no se pueden atar a una obra.` : ''}</div>
       <div class="tablewrap"><table>
-        <thead><tr><th>Serie / Folio</th><th>Cliente</th><th>Monto</th><th>Mes de cobro</th><th>OT (si se identificó)</th></tr></thead>
-        <tbody>${filasSinObra}</tbody>
+        <thead><tr><th>Serie / Folio</th><th>Cliente</th><th>Obra</th><th>Monto</th><th>Vencimiento</th><th>Cobro estimado</th><th>Regla aplicada</th></tr></thead>
+        <tbody>${filasCob || '<tr><td colspan="7">Sin facturas pendientes en esta selección.</td></tr>'}</tbody>
       </table></div>
-    </div>` : ''}
+    </div>
 
     <div class="panel span-4" style="margin-top:11px;">
       <h3 class="panel-title">Detalle mes a mes</h3>
