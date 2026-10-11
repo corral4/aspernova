@@ -146,6 +146,7 @@
       <button data-page="p6"><span class="n">06</span>Captura diaria</button>
       <button data-page="p7"><span class="n">07</span>Flujo de efectivo</button>
       <button data-page="p8"><span class="n">08</span>Asistencia</button>
+      <button data-page="p9"><span class="n">09</span>Avance vs Factura</button>
     </nav>
   </div>
 </div>
@@ -161,6 +162,7 @@
   <section id="p8" class="sheet">
     <iframe id="frameAsistencia" title="Asistencia del personal" data-src="AsperNova_Asistencia.html"></iframe>
   </section>
+  <section id="p9" class="sheet"></section>
 </main>
 
 <footer>Datos en vivo desde Google Sheets vía Apps Script · el respaldo se recalcula cada ~30 min · este documento no sustituye la revisión con el equipo de obra antes de decisiones de financiamiento.</footer>
@@ -187,6 +189,7 @@ function setObraSel(valor){
   renderGasto();
   renderConceptosPagina();
   renderFlujoEfectivo();
+  renderAvanceMensual();
 }
 function nombreObraSel(){
   if(!OBRA_SEL) return '';
@@ -252,7 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.body.addEventListener('change', (e) => {
     // Todos los filtros de obra son el mismo filtro: cambiar uno re-dibuja las demás pestañas.
-    if(['filtroObraResumen','filtroObraGasto','filtroObraConceptos','filtroObraFlujo'].includes(e.target.id)) setObraSel(e.target.value);
+    if(['filtroObraResumen','filtroObraGasto','filtroObraConceptos','filtroObraFlujo','filtroObraAvance'].includes(e.target.id)) setObraSel(e.target.value);
   });
 });
 
@@ -266,6 +269,7 @@ function renderTodo(){
   renderConceptosPagina();
   renderCapturaDiaria();
   renderFlujoEfectivo();
+  renderAvanceMensual();
 }
 
 // ============ 01 RESUMEN ============
@@ -473,6 +477,49 @@ function opcionesFiltroObra_(obraIdActual, incluirSinMapear){
   return html;
 }
 
+// Tabla de auditoría de los anticipos a proveedor: ninguno se neutraliza en silencio.
+// Un anticipo "absorbido" ya no suma al costo (su factura llegó y la factura trae el monto
+// completo); uno "abierto" o "caducado" sí sigue contando, porque ese dinero ya salió.
+function renderAnticiposProveedor_(obraId){
+  const todos = DATA.anticipos_proveedor || [];
+  if(!todos.length) return '';
+  const otSel = (() => {
+    if(!obraId) return null;
+    const o = (DATA.obras||[]).find(x=>x.id_obra===obraId) || (DATA.obras_sin_mapear||[]).find(x=>x.id_obra===obraId);
+    return o ? String(o.ot||'').trim().toUpperCase() : null;
+  })();
+  const filas = otSel ? todos.filter(a=>String(a.ot||'')===otSel) : todos;
+  if(!filas.length) return '';
+
+  const etiqueta = {
+    absorbido:['ok','ya facturado — no suma'],
+    parcial:  ['alerta','parcialmente facturado'],
+    abierto:  ['','pendiente de factura'],
+    caducado: ['alerta','sin factura tras 120 días']
+  };
+  const pendiente = filas.reduce((s,a)=>s+a.saldo,0);
+  const cuerpo = filas.map(a=>{
+    const [cls,txt] = etiqueta[a.estado] || ['',a.estado];
+    return `<tr class="${a.estado==='caducado'?'alerta':''}">
+      <td>${a.fecha}</td><td>${esc(a.proveedor)}</td><td class="mono">${esc(a.serie)}</td><td class="mono">${esc(a.ot)}</td>
+      <td class="num">${fmtMoney.format(a.monto)}</td><td class="num">${fmtMoney.format(a.absorbido)}</td>
+      <td class="num"><b>${fmtMoney.format(a.saldo)}</b></td>
+      <td><span class="tag ${cls}">${txt}</span>${a.estado!=='absorbido'?` <span style="font-size:10px;color:var(--ink-muted);">${a.dias_abierto} d</span>`:''}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="panel span-4" style="margin-top:11px;">
+      <h3 class="panel-title">Anticipos a proveedor — ${filas.length} · ${fmtMoney.format(pendiente)} sin facturar</h3>
+      <div class="panel-sub">Las compras con Código Producto 52 son anticipos. Cuando llega la factura del proveedor —que viene por el monto completo— el anticipo se absorbe y deja de contar, para no sumar el mismo gasto dos veces. Se cruzan por OT + Serie, en orden de fecha, con una ventana de 120 días. <b>Sólo el saldo sin absorber suma a Compra real.</b></div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Fecha</th><th>Proveedor</th><th>Serie</th><th>OT</th><th>Anticipo</th><th>Absorbido</th><th>Saldo que cuenta</th><th>Estado</th></tr></thead>
+        <tbody>${cuerpo}</tbody>
+      </table></div>
+      <div class="callout">Un anticipo <b>caducado</b> pasó más de 120 días sin su factura: deja de absorber y se queda como costo firme. Si ves varios, puede ser que la factura se haya capturado con otra Serie u otra OT — ahí el gasto sí quedaría duplicado.</div>
+    </div>`;
+}
+
 function renderGasto(obraId){
   obraId = (obraId === undefined || obraId === null) ? OBRA_SEL : obraId;
   const rowsCat = DATA.gasto_por_categoria || [];
@@ -501,6 +548,17 @@ function renderGasto(obraId){
 
   const totalMaterial = cats.reduce((s,c)=>s+c.monto,0);
   const totalOperativo = ops.reduce((s,o)=>s+o.monto,0);
+  // Anticipos a proveedor sin absorber: son costo real (ya salió el dinero) y sí entran a
+  // "Compra real", pero no tienen material detrás, así que no aparecen en las tablas de
+  // categoría/proveedor. Se suman aparte para que el total cuadre con Rentabilidad.
+  const otGasto = (() => {
+    if(!obraId) return null;
+    const o = (DATA.obras||[]).find(x=>x.id_obra===obraId) || (DATA.obras_sin_mapear||[]).find(x=>x.id_obra===obraId);
+    return o ? String(o.ot||'').trim().toUpperCase() : null;
+  })();
+  const totalAnticipo = (DATA.anticipos_proveedor||[])
+    .filter(a=>!otGasto || String(a.ot||'')===otGasto)
+    .reduce((s,a)=>s+a.saldo,0);
   const maxCat = Math.max(1, ...cats.map(c=>c.monto));
   const filasCat = cats.map(c=>`
     <div class="row"><div class="lbl">${esc(c.categoria)}</div><div class="track"><div class="fill" style="width:${(c.monto/maxCat*100).toFixed(1)}%"></div></div><div class="val">${fmtMoney.format(c.monto)}</div></div>
@@ -530,8 +588,12 @@ function renderGasto(obraId){
     <div class="grid">
       <div class="panel kpi"><div class="label">Gasto en material</div><div class="value">${fmtMoney.format(totalMaterial)}</div><div class="note">${cats.length} categorías distintas.</div></div>
       <div class="panel kpi"><div class="label">Gasto operativo</div><div class="value">${fmtMoney.format(totalOperativo)}</div><div class="note">Renta de equipo, combustible, viáticos, etc. (REF = Gastos Operativos).</div></div>
-      <div class="panel kpi"><div class="label">Total combinado</div><div class="value">${fmtMoney.format(totalMaterial+totalOperativo)}</div><div class="note">Esto es lo que se resta en "Compra real" del margen.</div></div>
+      <div class="panel kpi"><div class="label">Anticipos sin facturar</div><div class="value">${fmtMoney.format(totalAnticipo)}</div><div class="note">Pagados a proveedor, todavía sin su factura. Son costo real pero no tienen material detrás, por eso van aparte (detalle abajo).</div></div>
+      <div class="panel kpi"><div class="label">Total combinado</div><div class="value">${fmtMoney.format(totalMaterial+totalOperativo+totalAnticipo)}</div><div class="note">Material + operativo + anticipos sin facturar. Esto es lo que se resta en "Compra real" del margen.</div></div>
+    </div>
+    <div class="grid cols-2" style="margin-top:11px;">
       <div class="panel kpi"><div class="label">Categoría con mayor peso</div><div class="value">${cats[0]?esc(cats[0].categoria):'—'}</div><div class="note">${cats[0]?fmtMoney.format(cats[0].monto)+' · '+fmtPct(cats[0].monto/(totalMaterial||1)):''}</div></div>
+      <div class="panel kpi"><div class="label">Proveedor con mayor peso</div><div class="value" style="font-size:18px;">${provs[0]?esc(provs[0].proveedor):'—'}</div><div class="note">${provs[0]?fmtMoney.format(provs[0].monto):''}</div></div>
     </div>
     <div class="grid cols-2" style="margin-top:11px;">
       <div class="panel">
@@ -550,6 +612,7 @@ function renderGasto(obraId){
       <div class="panel-sub">Filas de Compras con REF = "Gastos Operativos", desglosadas por el campo Nombre (Producto). Antes se excluían del análisis por completo — ya cuentan en Compra real y en el margen de cada obra.</div>
       <div class="barlist">${filasOp || '<div class="panel-sub">Sin gasto operativo registrado para esta selección.</div>'}</div>
     </div>
+    ${renderAnticiposProveedor_(obraId)}
     <div class="panel span-4" style="margin-top:11px;">
       <h3 class="panel-title">Detalle de "Sin clasificar" (${fmtMoney.format(totalSC)})</h3>
       <div class="panel-sub">"Sin clasificar" = compras de material cuyo Código Producto no aparece todavía en tu hoja CAT_PROD (el gasto operativo no entra aquí, es un concepto aparte). Agrega estos códigos a CAT_PROD para que dejen de salir en esta lista.</div>
@@ -985,6 +1048,86 @@ function renderPivoteObraMes_(titulo, porObra, campo, mesesLista){
     </div>
   `;
 }
+// ============ 09 AVANCE DE COSTO vs FACTURACIÓN POR ESTIMACIONES ============
+// Responde "en septiembre avancé X, ¿se facturó en octubre?". El avance sale del costo
+// ejercido (compras + nómina), no del avance físico: las cantidades de 3_Avances_Diarios
+// vienen en unidades de material y se valúan a precio de concepto, lo que las infla.
+function renderAvanceMensual(obraId){
+  obraId = (obraId === undefined || obraId === null) ? OBRA_SEL : obraId;
+  const am = DATA.avance_mensual || {por_obra:[]};
+  const lista = am.por_obra || [];
+
+  const tieneObra = obraId && lista.some(o=>o.id_obra===obraId);
+  const aviso = (obraId && !tieneObra)
+    ? `<div class="callout">El filtro está en <b>${esc(nombreObraSel())}</b>, que no tiene contrato ni fechas en <span class="mono">1_Obras</span>, así que no se le puede medir avance. Aquí se muestran todas las obras.</div>` : '';
+  const mostrar = tieneObra ? lista.filter(o=>o.id_obra===obraId) : lista;
+
+  const opciones = opcionesFiltroObra_(obraId, true);
+  // El aviso sólo nombra obras que se están viendo: al filtrar, listar las demás es ruido.
+  const sinParams = mostrar.filter(o=>!o.sin_datos && !o.base_ajustada).map(o=>o.nombre_obra);
+
+  if(!am.hay_facturas_estimacion){
+    document.getElementById('p9').innerHTML = `
+      <div class="page-head"><h2>Avance de costo vs. facturación</h2></div>
+      <div class="callout ember">No se encontró ninguna factura con Código Producto <span class="mono">${esc(am.codigo_estimacion||'SER010')}</span> en Ventas. Sin eso no hay con qué comparar el avance. Revisa que ése sea el código de las facturas de estimación.</div>`;
+    return;
+  }
+
+  const sem = {
+    ok:['ok','al corriente'], atraso:['alerta','atraso'], adelanto:['','adelantado'],
+    en_curso:['','mes en curso'], sin_movimiento:['','sin movimiento'], sin_datos:['','sin datos']
+  };
+  const bloques = mostrar.map(o=>{
+    if(o.sin_datos) return '';
+    const a = o.acumulado || {};
+    const [clsA, txtA] = sem[a.estado] || ['',''];
+    const filas = o.meses.map(m=>{
+      const [cls,txt] = sem[m.estado] || ['',''];
+      return `<tr class="${m.estado==='atraso'?'alerta':''}">
+        <td>${m.mes}</td>
+        <td class="num">${fmtMoney.format(m.costo_mes)}</td>
+        <td class="num">${m.pct_avance_mes!=null?(m.pct_avance_mes*100).toFixed(1)+'%':'—'}</td>
+        <td class="num">${m.monto_esperado!=null?fmtMoney.format(m.monto_esperado):'—'}</td>
+        <td>${m.mes_factura}</td>
+        <td class="num">${fmtMoney.format(m.facturado)}</td>
+        <td class="num">${m.brecha!=null?fmtMoney.format(m.brecha):'—'}</td>
+        <td><span class="tag ${cls}">${txt}</span></td></tr>`;
+    }).join('');
+    return `
+      <div class="panel span-4" style="margin-top:11px;">
+        <h3 class="panel-title">${esc(o.nombre_obra)} <span class="mono" style="font-size:11px;font-weight:400;">OT ${esc(o.ot)}</span></h3>
+        <div class="panel-sub">Base estimable ${fmtMoney.format(o.base_estimable)}${o.base_ajustada
+          ? ' (contrato menos anticipo y finiquito).'
+          : ' — <b>sin ajustar</b>: usa el contrato completo porque esta obra todavía no tiene su anticipo y finiquito capturados, así que lo esperado sale alto y la brecha exagerada.'}
+          Costo proyectado sin compras únicas: ${fmtMoney.format(o.costo_proyectado_sin_unicas)}.</div>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Mes de avance</th><th>Costo del mes</th><th>% avance</th><th>Debió facturarse</th><th>Mes de factura</th><th>Facturado</th><th>Brecha</th><th></th></tr></thead>
+          <tbody>${filas}
+            <tr style="font-weight:600;border-top:2px solid var(--line-strong);">
+              <td>Acumulado</td><td></td>
+              <td class="num">${a.pct_avance!=null?(a.pct_avance*100).toFixed(1)+'%':'—'}</td>
+              <td class="num">${fmtMoney.format(a.monto_esperado||0)}</td><td></td>
+              <td class="num">${fmtMoney.format(a.facturado||0)}</td>
+              <td class="num">${fmtMoney.format(a.brecha||0)}</td>
+              <td><span class="tag ${clsA}">${txtA}</span></td></tr>
+          </tbody>
+        </table></div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('p9').innerHTML = `
+    <div class="page-head">
+      <h2>Avance de costo vs. facturación por estimaciones</h2>
+      <p>Lo avanzado en un mes debería facturarse al siguiente. Aquí se ve si eso pasó, y cuánto se viene arrastrando.</p>
+    </div>
+    <div class="filtro-row"><label>Ver: </label><select id="filtroObraAvance">${opciones}</select></div>
+    ${aviso}
+    <div class="callout">El avance se mide por <b>costo ejercido</b> (compras + nómina prorrateada), no por avance físico: las cantidades de <span class="mono">3_Avances_Diarios</span> vienen en unidades de material y se valúan a precio de concepto, lo que las infla. Es un indicador temprano, no una estimación. Su sesgo conocido: <b>el material se compra antes de instalarse</b>, así que el costo corre adelante del avance real. Por eso las compras únicas (tanque/bomba) y los anticipos a proveedor quedan fuera del cálculo. El renglón que vale para juzgar es el <b>acumulado</b>: el desfase real no siempre es de un mes exacto.</div>
+    ${sinParams.length ? `<div class="callout ember">${sinParams.length} obra(s) sin anticipo y finiquito capturados en <span class="mono">_parametros_obra</span>: ${sinParams.map(esc).join(', ')}. Mientras tanto usan el contrato completo como base y su brecha sale exagerada.</div>` : ''}
+    ${bloques || '<div class="panel">Sin obras con movimiento todavía.</div>'}
+  `;
+}
+
 </script>
 
 </body>
