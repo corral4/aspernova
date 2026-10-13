@@ -74,7 +74,13 @@
   th{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:11px;color:var(--ink-muted);border-bottom:1px solid var(--line-strong);cursor:default;}
   td.num{font-family:'IBM Plex Mono',monospace;text-align:right;white-space:nowrap;}
   tr.alerta td{background:var(--ember-soft);}
-  .tablewrap{overflow-x:auto;}
+  /* Una tabla más alta que la pantalla hace scroll dentro de su propio marco y conserva el
+     encabezado a la vista. Las que caben no cambian en nada (no aparece barra). Se hace así y
+     no con sticky contra la ventana porque overflow-x:auto ya convierte este contenedor en
+     uno de scroll, y entonces el sticky se mide contra él, no contra la página. */
+  .tablewrap{overflow:auto;max-height:calc(100vh - var(--topbar-h, 104px) - 48px);}
+  .tablewrap thead th{position:sticky;top:0;background:var(--panel);z-index:5;}
+  .tablewrap thead th::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:var(--line-strong);}
 
   .callout{border-left:3px solid var(--amber);background:var(--amber-soft);padding:9px 12px;font-size:12px;margin-top:10px;}
   .callout.ember{border-left-color:var(--ember);background:var(--ember-soft);}
@@ -227,6 +233,7 @@ async function iniciar(){
     renderTodo();
     document.getElementById('loading').style.display = 'none';
     document.getElementById('app').style.display = 'block';
+    ajustarAltoTopbar(); // hasta aquí la barra tiene alto real: antes estaba oculta y medía 0
   }catch(err){
     document.getElementById('loading').style.display = 'none';
     const box = document.getElementById('errorbox');
@@ -235,7 +242,17 @@ async function iniciar(){
   }
 }
 
+// Mide la barra superior y la publica como variable CSS, para que los encabezados de tabla
+// se peguen justo debajo de ella. Se recalcula al cambiar el tamaño de la ventana, porque
+// las pestañas se envuelven en pantallas angostas y la barra crece.
+function ajustarAltoTopbar(){
+  const tb = document.querySelector('.topbar');
+  if(tb) document.documentElement.style.setProperty('--topbar-h', tb.offsetHeight + 'px');
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  ajustarAltoTopbar();
+  window.addEventListener('resize', ajustarAltoTopbar);
   iniciar();
   document.body.addEventListener('click', (e) => {
     if(e.target.id === 'refreshBtn') iniciar();
@@ -311,7 +328,11 @@ function renderResumen(obraId){
         <div class="panel kpi"><div class="label">Monto contratado (portafolio)</div><div class="value">${fmtMoney.format(r.monto_contrato_total||0)}</div><div class="note">${obras.length} obras registradas, ${activas.length} activas.</div></div>
         <div class="panel kpi"><div class="label">Compra real acumulada</div><div class="value">${fmtMoney.format(r.compra_real_total||0)}</div><div class="note">Material comprado, todo el portafolio.</div></div>
         <div class="panel kpi"><div class="label">Facturado real acumulado</div><div class="value">${fmtMoney.format(r.facturado_real_total||0)}</div><div class="note">${fmtPct((r.facturado_real_total||0)/(r.monto_contrato_total||1))} del monto contratado.</div></div>
+        <div class="panel kpi"><div class="label">Por facturar</div><div class="value">${fmtMoney.format((r.monto_contrato_total||0)-(r.facturado_real_total||0))}</div><div class="note">Contratado − facturado. Incluye anticipo y finiquito, no sólo estimaciones.</div></div>
+      </div>
+      <div class="grid cols-2" style="margin-top:11px;">
         <div class="panel kpi"><div class="label">Margen a contrato (portafolio)</div><div class="value">${fmtMoney.format(r.margen_contrato_total||0)}</div><div class="note">Monto Total Contrato − Compra real − Nómina prorrateada.</div></div>
+        <div class="panel kpi"><div class="label">Nómina prorrateada acumulada</div><div class="value">${fmtMoney.format(r.nomina_prorrateada_total||0)}</div><div class="note">Repartida entre las obras activas de cada mes.</div></div>
       </div>
       <div class="grid" style="margin-top:11px;">
         ${kpiCobranza_(r.facturado_con_iva_total, r.cobranza_pendiente_total, r.cobrado_total, r.pct_cobrado_total,
@@ -353,7 +374,11 @@ function renderResumen(obraId){
           <div class="panel kpi"><div class="label">Monto contratado</div><div class="value">${fmtMoney.format(o.monto_contrato)}</div><div class="note">${esc(o.cliente)} · OT ${esc(o.ot)} · ${esc(o.estado)}</div></div>
           <div class="panel kpi"><div class="label">Compra real</div><div class="value">${fmtMoney.format(o.compra_real)}</div><div class="note">Material: ${fmtMoney.format(o.compra_material)} · Operativo: ${fmtMoney.format(o.gasto_operativo)}</div></div>
           <div class="panel kpi"><div class="label">Facturado real</div><div class="value">${fmtMoney.format(o.facturado_real)}</div><div class="note">${fmtPct(o.pct_facturado_contrato)} del contrato.</div></div>
+          <div class="panel kpi"><div class="label">Por facturar</div><div class="value">${fmtMoney.format(o.monto_contrato - o.facturado_real)}</div><div class="note">Contratado − facturado. Incluye anticipo y finiquito, no sólo estimaciones.</div></div>
+        </div>
+        <div class="grid cols-2" style="margin-top:11px;">
           <div class="panel kpi"><div class="label">Nómina prorrateada acumulada</div><div class="value">${fmtMoney.format(o.nomina_prorrateada_acumulada)}</div></div>
+          <div class="panel kpi"><div class="label">Costo total acumulado</div><div class="value">${fmtMoney.format(o.compra_real + o.nomina_prorrateada_acumulada)}</div><div class="note">Compra real + nómina prorrateada.</div></div>
         </div>
         <div class="grid cols-3" style="margin-top:11px;">
           <div class="panel kpi"><div class="label">Margen a contrato</div><div class="value">${fmtMoney.format(o.margen_contrato)}</div>${o.margen_contrato<0?'<span class="tag alerta">revisar</span>':'<span class="tag ok">sin alerta</span>'}</div>
@@ -946,6 +971,18 @@ function renderFlujoEfectivo(obraId){
       <div class="panel kpi"><div class="label">Flujo neto promedio mensual</div><div class="value">${fmtMoney.format(promedioNeto)}</div></div>
       <div class="panel kpi"><div class="label">Obras sin "Días cliente" identificados</div><div class="value">${sinDias.length}</div><div class="note">${sinDias.map(esc).join(', ')||'todas identificadas'}</div></div>
     </div>
+    ${(() => {
+      // Obras cuya Fecha Fin Programada no sirve para proyectar. Importa avisarlo porque esa
+      // fecha gobierna tanto el reparto del costo como hasta cuándo se factura.
+      const aj = (fe.obras_horizonte_ajustado||[]).filter(x=>!obraId || x.id_obra===obraId);
+      if(!aj.length) return '';
+      return `<div class="callout ember" style="margin-top:11px;">
+        <b>${aj.length} obra(s) con Fecha Fin Programada que no sirve para proyectar.</b> Se les aplicó un horizonte de ${fe.meses_minimos_horizonte||3} meses para repartir el costo y la facturación restantes. Corrige la fecha en <span class="mono">1_Obras</span> y la proyección se acomoda sola.
+        <div class="tablewrap" style="margin-top:8px;"><table>
+          <thead><tr><th>Obra</th><th>Problema</th><th>Horizonte usado</th></tr></thead>
+          <tbody>${aj.map(x=>`<tr><td>${esc(x.nombre_obra)}</td><td>${esc(x.motivo)}</td><td>${x.horizonte_usado}</td></tr>`).join('')}</tbody>
+        </table></div></div>`;
+    })()}
 
     <div class="panel span-4" style="margin-top:11px;">
       <h3 class="panel-title">Caja acumulada proyectada${obraId && vista ? ' — ' + esc(vista.nombre_obra) : ' — portafolio completo'}</h3>
