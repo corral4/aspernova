@@ -49,6 +49,41 @@
   .box.ok{background:var(--sage);}
   .box.miss{background:var(--panel);border:1px solid var(--ember);}
 
+  nav.tabs{display:flex;gap:2px;max-width:1000px;margin:0 auto;padding:0 20px;}
+  nav.tabs button{font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;color:var(--ink-muted);
+    background:transparent;border:1px solid var(--line);border-bottom:none;padding:8px 15px;cursor:pointer;
+    white-space:nowrap;border-radius:3px 3px 0 0;position:relative;top:1px;}
+  nav.tabs button.active{color:var(--ink);background:var(--panel);border-color:var(--line-strong);border-bottom:1px solid var(--panel);}
+  .hoja{display:none;}
+  .hoja.active{display:block;}
+
+  .pingate{max-width:380px;margin:30px auto;}
+  .pingate .fila{display:flex;gap:8px;margin-top:12px;}
+  .pingate input{flex:1;font-family:'IBM Plex Mono',monospace;font-size:15px;border:1px solid var(--line-strong);padding:9px 11px;min-width:0;}
+  button.primary{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13px;border:1px solid var(--steel);background:var(--steel);color:#fff;padding:9px 16px;cursor:pointer;}
+  button.primary:disabled{opacity:.5;cursor:default;}
+  #pinMsgMat{font-size:12px;margin-top:10px;min-height:18px;color:var(--ember);}
+
+  .filtros{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;}
+  .filtros .campo{display:flex;flex-direction:column;gap:3px;}
+  .filtros label{font-size:11px;color:var(--ink-muted);}
+  .filtros input,.filtros select{font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;border:1px solid var(--line-strong);
+    padding:6px 9px;background:#fff;color:var(--ink);max-width:260px;}
+  button.ghost{font-family:'IBM Plex Mono',monospace;font-size:11px;border:1px solid var(--line-strong);
+    background:var(--panel);padding:6px 11px;cursor:pointer;color:var(--steel);}
+  button.ghost:hover{background:var(--steel-soft);}
+  button.ghost:disabled{opacity:.5;cursor:default;}
+
+  /* Tabla de consulta: rejilla normal, distinta del heatmap de arriba que usa border-spacing */
+  table.lista{border-collapse:collapse;border-spacing:0;width:100%;font-size:12px;}
+  table.lista th{text-align:left;font-family:'Space Grotesk',sans-serif;font-size:11px;color:var(--ink-muted);
+    padding:7px 8px;border-bottom:1px solid var(--line-strong);background:var(--panel);position:sticky;top:0;z-index:2;}
+  table.lista th.num, table.lista td.num{text-align:right;font-family:'IBM Plex Mono',monospace;}
+  table.lista td{padding:6px 8px;border-bottom:1px solid var(--line);}
+  table.lista tbody tr:hover{background:var(--steel-soft);}
+  .scrolltabla{overflow:auto;max-height:62vh;}
+  .callout{border-left:3px solid var(--line-strong);background:var(--panel);padding:9px 12px;font-size:12px;margin-top:10px;color:var(--ink-muted);}
+
   #loading, #errorbox{max-width:1000px;margin:60px auto;padding:0 20px;text-align:center;color:var(--ink-muted);font-family:'IBM Plex Mono',monospace;font-size:13px;}
   #errorbox{color:var(--ember);display:none;}
   footer{max-width:1000px;margin:0 auto;padding:20px;color:var(--ink-muted);font-size:11px;}
@@ -66,20 +101,40 @@
       <span class="sub">AsperNova · <span id="ultimaActualizacion">—</span> <button id="refreshBtn">↻ actualizar</button></span>
     </div>
   </div>
+  <nav class="tabs" id="tabs">
+    <button data-hoja="h1" class="active">Captura diaria</button>
+    <button data-hoja="h2">Materiales usados</button>
+  </nav>
   <main>
-    <div class="page-head">
-      <p>Un cuadro verde significa que ese día se registró al menos un avance de obra. Sólo obras activas.</p>
-    </div>
-    <div id="contenido"></div>
+    <section id="h1" class="hoja active">
+      <div class="page-head">
+        <p>Un cuadro verde significa que ese día se registró al menos un avance de obra. Sólo obras activas.</p>
+      </div>
+      <div id="contenido"></div>
+    </section>
+    <section id="h2" class="hoja">
+      <div class="page-head">
+        <p>Consulta de material usado por obra y rango de fechas, según lo capturado en los avances diarios. Sólo cantidades.</p>
+      </div>
+      <div id="contenidoMat">
+        <div class="panel"><div class="kpi"><div class="note">Cargando materiales…</div></div></div>
+      </div>
+    </section>
   </main>
-  <footer>Vista restringida — sólo muestra estatus de captura, sin datos financieros.</footer>
+  <footer>Vista restringida — estatus de captura y cantidades de material, sin datos financieros.</footer>
 </div>
 
 <script>
 // Este endpoint, con ?vista=captura_diaria, sólo devuelve { generado, captura_diaria } —
 // nunca trae márgenes, compras, ni nómina, sin importar qué tan bien alguien inspeccione
 // las peticiones de red desde esta página.
-const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwD_qXXjYenWoe0DWpEG_EZbxOr5nunyy0yE0kgd14Yd7sGBPG_E_sfQVoDviUKZ4w/exec?vista=captura_diaria';
+const BASE = 'https://script.google.com/macros/s/AKfycbwD_qXXjYenWoe0DWpEG_EZbxOr5nunyy0yE0kgd14Yd7sGBPG_E_sfQVoDviUKZ4w/exec';
+const ENDPOINT = BASE + '?vista=captura_diaria';
+// Los materiales tienen su propia vista, su propia caché y su propio PIN. Tampoco lleva un
+// peso de por medio: material, obra, fecha y cantidad. El PIN se valida en el SERVIDOR, así
+// que los datos no salen sin él; la pantalla de abajo sólo es la puerta. Se pide al abrir la
+// hoja, no al cargar la página — así la captura diaria sigue abierta sin fricción.
+const ENDPOINT_MAT = (pin) => BASE + '?vista=materiales&pin=' + encodeURIComponent(pin);
 
 const esc = (s) => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let DATA = null;
@@ -112,8 +167,204 @@ async function iniciar(){
 
 document.addEventListener('DOMContentLoaded', () => {
   iniciar();
-  document.body.addEventListener('click', (e) => { if(e.target.id === 'refreshBtn') iniciar(); });
+  document.body.addEventListener('click', (e) => {
+    if(e.target.id === 'refreshBtn'){ iniciar(); if(MAT && PIN_MAT) cargarMateriales(PIN_MAT, true); return; }
+    if(e.target.id === 'btnCsvMat'){ exportarCsvMateriales(); return; }
+    if(e.target.id === 'btnPinMat'){ entrarMateriales(); return; }
+    if(e.target.id === 'btnLimpiarMat'){ limpiarFiltrosMateriales(); return; }
+    const tab = e.target.closest('nav.tabs button');
+    if(tab){
+      document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+      tab.classList.add('active');
+      const destino = tab.getAttribute('data-hoja');
+      document.querySelectorAll('.hoja').forEach(h=>h.classList.toggle('active', h.id===destino));
+      if(destino === 'h2' && !MAT) puertaMateriales(); // carga perezosa: sólo al abrir la hoja
+      window.scrollTo({top:0, behavior:'smooth'});
+    }
+  });
+  document.body.addEventListener('change', (e) => {
+    if(['filtroObraMat','filtroDesdeMat','filtroHastaMat','filtroTextoMat','filtroVistaMat'].includes(e.target.id)) renderMateriales();
+  });
+  document.body.addEventListener('input', (e) => { if(e.target.id === 'filtroTextoMat') renderMateriales(); });
 });
+
+// ====================== MATERIALES USADOS (consulta) ======================
+let MAT = null;
+let PIN_MAT = '';
+
+// Si ya se entró antes en esta misma sesión del navegador, no se vuelve a pedir el PIN.
+function puertaMateriales(){
+  let guardado = '';
+  try{ guardado = sessionStorage.getItem('mat_pin') || ''; }catch(e){}
+  if(guardado){ cargarMateriales(guardado, false, true); return; }
+  pintarPuertaMateriales();
+}
+
+function pintarPuertaMateriales(){
+  document.getElementById('contenidoMat').innerHTML = `
+    <div class="panel pingate">
+      <h3 style="font-size:15px;font-weight:600;">Consulta protegida</h3>
+      <div class="note" style="font-size:12px;color:var(--ink-muted);margin-top:4px;">Las cantidades de material no traen precios, pero sí dejan ver el tamaño y el ritmo de cada obra.</div>
+      <div class="fila"><input type="password" id="pinMat" placeholder="PIN" autocomplete="off"><button class="primary" id="btnPinMat">Entrar</button></div>
+      <div id="pinMsgMat"></div>
+    </div>`;
+  const inp = document.getElementById('pinMat');
+  inp.focus();
+  inp.addEventListener('keydown', (ev)=>{ if(ev.key === 'Enter') entrarMateriales(); });
+}
+
+function entrarMateriales(){
+  const pin = (document.getElementById('pinMat').value || '').trim();
+  if(!pin){ document.getElementById('pinMsgMat').textContent = 'Ingresa el PIN.'; return; }
+  cargarMateriales(pin);
+}
+
+async function cargarMateriales(pin, forzar, silencioso){
+  if(MAT && !forzar) return;
+  const btn = document.getElementById('btnPinMat');
+  const msg = document.getElementById('pinMsgMat');
+  if(btn) btn.disabled = true;
+  if(msg && !silencioso) msg.textContent = 'Verificando…';
+  const ctrl = new AbortController();
+  const to = setTimeout(()=>ctrl.abort(), 20000);
+  try{
+    const r = await fetch(ENDPOINT_MAT(pin), {signal: ctrl.signal});
+    if(!r.ok) throw new Error('El endpoint respondió con estado ' + r.status);
+    const data = await r.json();
+    if(data.error) throw new Error(data.error);
+    MAT = data;
+    PIN_MAT = pin;
+    try{ sessionStorage.setItem('mat_pin', pin); }catch(e){}
+    pintarMarcoMateriales();
+    renderMateriales();
+  }catch(err){
+    const texto = err.name === 'AbortError' ? 'Tiempo de espera agotado (20 s).' : err.message;
+    try{ sessionStorage.removeItem('mat_pin'); }catch(e){}
+    // Si el PIN guardado ya no sirve, se vuelve a pedir en vez de dejar un error muerto.
+    if(!document.getElementById('pinMsgMat')) pintarPuertaMateriales();
+    const m = document.getElementById('pinMsgMat');
+    if(m) m.textContent = texto;
+    const b2 = document.getElementById('btnPinMat');
+    if(b2) b2.disabled = false;
+  }finally{ clearTimeout(to); }
+}
+
+const fmtCant = new Intl.NumberFormat('es-MX', {maximumFractionDigits:2});
+const fechaLarga = (ymd) => { const [y,m,d]=ymd.split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'}); };
+
+function pintarMarcoMateriales(){
+  const ops = (MAT.obras||[]).map(o=>`<option value="${esc(o.id_obra)}">${esc(o.nombre_obra)}</option>`).join('');
+  document.getElementById('contenidoMat').innerHTML = `
+    <div class="panel span-2">
+      <div class="filtros">
+        <div class="campo"><label>Obra</label><select id="filtroObraMat"><option value="">Todas las obras</option>${ops}</select></div>
+        <div class="campo"><label>Desde</label><input type="date" id="filtroDesdeMat" min="${MAT.desde}"></div>
+        <div class="campo"><label>Hasta</label><input type="date" id="filtroHastaMat" min="${MAT.desde}"></div>
+        <div class="campo"><label>Material contiene</label><input type="text" id="filtroTextoMat" placeholder="ej. tubo" autocomplete="off"></div>
+        <div class="campo"><label>Ver</label><select id="filtroVistaMat">
+          <option value="total">Totales por material</option>
+          <option value="detalle">Detalle por día</option>
+        </select></div>
+        <button class="ghost" id="btnLimpiarMat">limpiar</button>
+        <button class="ghost" id="btnCsvMat">⬇ CSV</button>
+      </div>
+      <div id="resumenMat"></div>
+      <div class="scrolltabla" id="tablaMat"></div>
+      <div class="callout">Cantidades tal como se capturaron en los avances diarios. <b>No se muestra unidad</b> a propósito: la hoja de avances no la trae, y la del catálogo es la del concepto, que no siempre coincide con la del material. Historial disponible desde ${fechaLarga(MAT.desde)}.</div>
+    </div>`;
+}
+
+// Devuelve las filas que pasan los filtros, ya sea en detalle o agrupadas por material.
+function filtrarMateriales(){
+  const obra = document.getElementById('filtroObraMat').value;
+  const desde = document.getElementById('filtroDesdeMat').value;
+  const hasta = document.getElementById('filtroHastaMat').value;
+  const texto = document.getElementById('filtroTextoMat').value.trim().toLowerCase();
+  const vista = document.getElementById('filtroVistaMat').value;
+
+  const filas = (MAT.filas||[]).filter(r =>
+    (!obra || r.id_obra === obra) &&
+    (!desde || r.fecha >= desde) &&
+    (!hasta || r.fecha <= hasta) &&
+    (!texto || r.material.toLowerCase().includes(texto)));
+
+  if(vista === 'detalle') return {vista, filas};
+
+  // Totales: por material, y por obra también cuando se ven todas, para no mezclar obras distintas
+  const porClave = new Map();
+  filas.forEach(r => {
+    const clave = obra ? r.material : (r.nombre_obra + '||' + r.material);
+    if(!porClave.has(clave)) porClave.set(clave, {nombre_obra:r.nombre_obra, material:r.material, cantidad:0, dias:new Set()});
+    const x = porClave.get(clave);
+    x.cantidad += r.cantidad;
+    x.dias.add(r.fecha);
+  });
+  const totales = [...porClave.values()]
+    .map(x => ({nombre_obra:x.nombre_obra, material:x.material, cantidad:Math.round(x.cantidad*100)/100, dias:x.dias.size}))
+    .sort((a,b)=> b.cantidad - a.cantidad);
+  return {vista, filas: totales, mostrarObra: !obra};
+}
+
+function renderMateriales(){
+  if(!MAT) return;
+  const {vista, filas, mostrarObra} = filtrarMateriales();
+  const total = filas.reduce((s,r)=>s+r.cantidad,0);
+
+  // Con varias obras a la vista un material aparece una vez por obra, así que contarlos como
+  // "materiales distintos" mentiría: se cuentan aparte.
+  const distintos = new Set(filas.map(r=>r.material)).size;
+  const detalleTxt = vista==='detalle'
+    ? `${filas.length} renglón(es) · ${distintos} material(es) distintos`
+    : (mostrarObra ? `${filas.length} combinación(es) obra-material · ${distintos} material(es) distintos`
+                   : `${filas.length} material(es)`);
+  document.getElementById('resumenMat').innerHTML =
+    `<div style="font-size:12px;color:var(--ink-muted);margin-bottom:8px;">${detalleTxt} · cantidad total ${fmtCant.format(total)}</div>`;
+
+  let html;
+  if(!filas.length){
+    html = '<div class="callout" style="margin-top:0;">Sin material capturado con estos filtros.</div>';
+  } else if(vista === 'detalle'){
+    html = `<table class="lista"><thead><tr><th>Fecha</th><th>Obra</th><th>Material</th><th class="num">Cantidad</th></tr></thead><tbody>${
+      filas.map(r=>`<tr><td class="mono">${r.fecha}</td><td>${esc(r.nombre_obra)}</td><td>${esc(r.material)}</td><td class="num">${fmtCant.format(r.cantidad)}</td></tr>`).join('')
+    }</tbody></table>`;
+  } else {
+    html = `<table class="lista"><thead><tr>${mostrarObra?'<th>Obra</th>':''}<th>Material</th><th class="num">Cantidad</th><th class="num">Días con registro</th></tr></thead><tbody>${
+      filas.map(r=>`<tr>${mostrarObra?`<td>${esc(r.nombre_obra)}</td>`:''}<td>${esc(r.material)}</td><td class="num">${fmtCant.format(r.cantidad)}</td><td class="num">${r.dias}</td></tr>`).join('')
+    }</tbody></table>`;
+  }
+  document.getElementById('tablaMat').innerHTML = html;
+}
+
+function limpiarFiltrosMateriales(){
+  ['filtroObraMat','filtroDesdeMat','filtroHastaMat','filtroTextoMat'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('filtroVistaMat').value='total';
+  renderMateriales();
+}
+
+// El CSV baja exactamente lo que está en pantalla, con los mismos filtros.
+function exportarCsvMateriales(){
+  if(!MAT) return;
+  const {vista, filas, mostrarObra} = filtrarMateriales();
+  if(!filas.length) return;
+  const q = v => { v = String(v==null?'':v); return /[",\r\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; };
+  const cab = vista==='detalle'
+    ? ['Fecha','Obra','Material','Cantidad']
+    : (mostrarObra?['Obra']:[]).concat(['Material','Cantidad','Dias con registro']);
+  const cuerpo = filas.map(r => vista==='detalle'
+    ? [r.fecha,r.nombre_obra,r.material,r.cantidad]
+    : (mostrarObra?[r.nombre_obra]:[]).concat([r.material,r.cantidad,r.dias]));
+  const csv = '\uFEFF' + [cab,...cuerpo].map(f=>f.map(q).join(',')).join('\r\n');
+  const obra = document.getElementById('filtroObraMat');
+  const partes = ['materiales', vista,
+    obra.value ? obra.selectedOptions[0].text.replace(/[^0-9A-Za-zÁÉÍÓÚáéíóúÑñ]+/g,'-') : 'todas',
+    document.getElementById('filtroDesdeMat').value || 'inicio',
+    document.getElementById('filtroHastaMat').value || 'hoy'];
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+  a.download = partes.join('_') + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+}
 
 function render(){
   if(DATA.generado){
