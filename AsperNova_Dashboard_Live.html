@@ -904,6 +904,54 @@ function renderDesgloseEgreso_(fe, obraId){
     </div>`;
 }
 
+// La contraparte del desglose anterior, del lado del ingreso. Las dos razones por las que
+// este número suele "no cuadrar" al sacarlo a mano quedan en renglones propios: el saldo que
+// se factura después de la ventana, y lo que se factura dentro pero se cobra después por los
+// días de crédito del cliente.
+function renderDesgloseIngreso_(fe, obraId){
+  const todos = fe.desglose_ingreso || [];
+  if(!todos.length) return '';
+  const filas = obraId ? todos.filter(d=>d.id_obra===obraId) : todos;
+  if(!filas.length) return '';
+
+  const bloques = filas.map(d=>{
+    const r = (etiqueta, valor, nota, fuerte) => `<tr${fuerte?' style="font-weight:600;border-top:2px solid var(--line-strong);"':''}>
+      <td>${etiqueta}</td><td class="num">${valor===null?'—':fmtMoney.format(valor)}</td>
+      <td style="font-size:11px;color:var(--ink-muted);">${nota||''}</td></tr>`;
+    const credito = d.dias_cliente === null
+      ? 'sin <span class="mono">Dias cliente</span> en el catálogo: esta facturación no se cobra en ningún mes'
+      : `se cobra ${d.dias_cliente} días después de facturar (<span class="mono">Dias cliente</span>)`;
+    return `
+      <div style="margin-top:${filas.length>1?'14px':'0'};">
+        ${filas.length>1?`<div style="font-weight:600;font-size:12.5px;margin-bottom:5px;">${esc(d.nombre_obra)}</div>`:''}
+        <div class="tablewrap"><table>
+          <tbody>
+            ${r('Monto del contrato', d.monto_contrato, '')}
+            ${r('− ya facturado', -d.facturado_real, 'todas las facturas emitidas de esta OT, sin IVA')}
+            ${r('= saldo por facturar', d.saldo_por_facturar, '', true)}
+            ${r('− saldo que se factura después de la ventana', -d.saldo_fuera_de_ventana,
+                d.saldo_fuera_de_ventana > 1
+                  ? 'la obra sigue más allá de estos 12 meses'
+                  : 'nada: la obra termina dentro de la ventana')}
+            ${r('= facturación proyectada en la ventana', d.factura_proyectada_en_ventana,
+                `${d.meses_facturables} mes(es), hasta ${d.hasta}${d.factura_globo>1?` · el último mes factura el saldo completo (${fmtMoney.format(d.factura_globo)})`:''}${d.horizonte_ajustado?' — horizonte ajustado, ver aviso arriba':''}`, true)}
+            ${r('− lo facturado que se cobra después', -d.cobro_despues_de_la_ventana, credito)}
+            ${r('= cobros de facturación nueva', d.cobro_dentro_de_ventana, '', true)}
+            ${r('+ cobranza de facturas ya emitidas', d.cobranza_existente_en_ventana, 'saldo vivo de Cobranza, en el mes en que se estima su pago')}
+            ${r('= ingreso proyectado de la obra', d.ingreso_en_ventana, 'esto es lo que suma en los 12 meses de arriba', true)}
+          </tbody>
+        </table></div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="panel span-4" style="margin-top:11px;">
+      <h3 class="panel-title">De dónde sale el ingreso proyectado${obraId?'':' — por obra'}</h3>
+      <div class="panel-sub">La cadena completa del cálculo. ${obraId?'':'Se lee más fácil filtrando a una obra.'} Los ingresos por servicios no aparecen aquí: no son de una obra y sólo se ven en la vista de portafolio.</div>
+      ${bloques}
+    </div>`;
+}
+
 function renderFlujoEfectivo(obraId){
   obraId = (obraId === undefined || obraId === null) ? OBRA_SEL : obraId;
   // El flujo por obra sólo existe para obras de 1_Obras; una OT sin mapear no tiene
@@ -1031,6 +1079,7 @@ function renderFlujoEfectivo(obraId){
       <div id="chartFlujo"></div>
     </div>
     ${renderDesgloseEgreso_(fe, obraId)}
+    ${renderDesgloseIngreso_(fe, obraId)}
 
     <div class="panel span-4" style="margin-top:11px;">
       <h3 class="panel-title">Cobranza pendiente — ${cobDet.length} factura(s) · ${fmtMoney.format(cobTot)} <span class="mono" style="font-size:11px;font-weight:400;">(con IVA)</span></h3>
