@@ -862,6 +862,16 @@ async function guardarSupuestos(){
 }
 
 // ============ 07 FLUJO DE EFECTIVO ============
+// De dónde salió la fecha que cierra el horizonte. Es la pregunta que sigue siempre después
+// de ver el total, así que va en el mismo renglón en vez de en el código.
+function notaHorizonte_(d){
+  const fuente = d.horizonte_fuente === 'Fecha Entrega Real' ? 'según <span class="mono">Fecha Entrega Real</span>'
+    : d.horizonte_fuente === 'Fecha Fin Programada' ? 'según <span class="mono">Fecha Fin Programada</span>'
+    : 'piso de 3 meses: no hay fecha utilizable capturada';
+  return d.horizonte_ajustado ? ` — ${fuente}, ajustado (ver aviso arriba)` : ` — ${fuente}`;
+}
+
+
 // De dónde sale el egreso proyectado de cada obra, paso a paso. Está aquí para que el número
 // se pueda rastrear sin leer el código: cada renglón es una resta sobre el anterior.
 function renderDesgloseEgreso_(fe, obraId){
@@ -888,7 +898,7 @@ function renderDesgloseEgreso_(fe, obraId){
             ${r('− compra única proyectada', -d.costo_unico_proyectado, 'tanque/bomba: se agenda aparte, en su mes planeado')}
             ${r('= costo a repartir en el tiempo', d.costo_prorrateable, '', true)}
             ${r('− ya gastado en material regular', -d.gastado_material_regular, `compra real ${fmtMoney.format(d.compra_real)} menos ${fmtMoney.format(d.ya_gastado_unico)} que ya se fue en tanque/bomba`)}
-            ${r('= remanente a repartir', d.remanente_a_repartir, `entre hoy y ${d.hasta} (${d.dias_restantes} días)${d.horizonte_ajustado?' — horizonte ajustado, ver aviso arriba':''}`, true)}
+            ${r('= remanente a repartir', d.remanente_a_repartir, `entre hoy y ${d.hasta} (${d.dias_restantes} días)${notaHorizonte_(d)}`, true)}
             ${unicas>0 ? r('+ compras únicas pendientes', unicas, 'caen completas en su mes planeado, no se reparten') : ''}
             ${r('= egreso proyectado de la obra', total, 'esto es lo que suma en los 12 meses de arriba', true)}
           </tbody>
@@ -934,7 +944,7 @@ function renderDesgloseIngreso_(fe, obraId){
                   ? 'la obra sigue más allá de estos 12 meses'
                   : 'nada: la obra termina dentro de la ventana')}
             ${r('= facturación proyectada en la ventana', d.factura_proyectada_en_ventana,
-                `${d.meses_facturables} mes(es), hasta ${d.hasta}${d.factura_globo>1?` · el último mes factura el saldo completo (${fmtMoney.format(d.factura_globo)})`:''}${d.horizonte_ajustado?' — horizonte ajustado, ver aviso arriba':''}`, true)}
+                `${d.meses_facturables} mes(es), hasta ${d.hasta}${d.factura_globo>1?` · el último mes factura el saldo completo (${fmtMoney.format(d.factura_globo)})`:''}${notaHorizonte_(d)}`, true)}
             ${r('− lo facturado que se cobra después', -d.cobro_despues_de_la_ventana, credito)}
             ${r('= cobros de facturación nueva', d.cobro_dentro_de_ventana, '', true)}
             ${r('+ cobranza de facturas ya emitidas', d.cobranza_existente_en_ventana, 'saldo vivo de Cobranza, en el mes en que se estima su pago')}
