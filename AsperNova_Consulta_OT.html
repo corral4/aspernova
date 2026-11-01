@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Consulta de OT — AsperNova</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F1F4F3; --panel:#FFFFFF; --ink:#16232B; --ink-muted:#5C6B72;
+    --line:#CBD4D2; --line-strong:#8CA0A0;
+    --steel:#2C5F7C; --steel-soft:#DCE6EA;
+    --sage:#3F7864; --sage-soft:#DCEBE3;
+    --ember:#B3492D; --ember-soft:#F4E1DB;
+    --amber:#B98A2E; --amber-soft:#F2E9D6;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);}
+  body{font-family:'IBM Plex Sans',sans-serif;font-size:14px;line-height:1.5;}
+  h1,h2,h3{font-family:'Space Grotesk',sans-serif;margin:0;}
+  [hidden]{display:none !important;}
+
+  /* ---- PIN ---- */
+  #gate{max-width:380px;margin:12vh auto 0;padding:0 20px;}
+  #gate .panel{padding:22px;}
+  #gate h1{font-size:19px;font-weight:600;margin-bottom:4px;}
+  #gate p{color:var(--ink-muted);font-size:12.5px;margin:0 0 14px;}
+  #gate .row{display:flex;gap:8px;}
+  input[type=password],input[type=text]{font-size:13px;border:1px solid var(--line-strong);padding:7px 10px;background:#fff;color:var(--ink);min-width:0;font-family:'IBM Plex Sans',sans-serif;}
+  #gate input[type=password]{flex:1;font-family:'IBM Plex Mono',monospace;font-size:15px;padding:9px 11px;}
+  button.primary{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13px;border:1px solid var(--steel);background:var(--steel);color:#fff;padding:9px 16px;cursor:pointer;}
+  button.primary:disabled{opacity:.5;cursor:default;}
+  button.ghost{font-family:'IBM Plex Mono',monospace;font-size:11px;border:1px solid var(--line-strong);background:var(--panel);padding:5px 10px;cursor:pointer;color:var(--steel);}
+  button.ghost:hover{background:var(--steel-soft);}
+  #gateMsg{font-size:12px;margin-top:10px;min-height:18px;color:var(--ember);}
+
+  /* ---- layout ---- */
+  .topbar{border-bottom:1px solid var(--line-strong);background:var(--paper);}
+  .topbar-inner{max-width:1280px;margin:0 auto;padding:14px 20px;display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;}
+  .topbar h1{font-size:19px;font-weight:600;}
+  .sub{color:var(--ink-muted);font-size:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  main{max-width:1280px;margin:0 auto;padding:16px 20px 50px;}
+  .panel{background:var(--panel);border:1px solid var(--line-strong);padding:14px 16px;}
+  h3.panel-title{font-size:13.5px;font-weight:600;margin-bottom:2px;}
+  .panel-sub{font-size:11.5px;color:var(--ink-muted);margin-bottom:10px;}
+
+  .controls{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;}
+  .controls .field{display:flex;flex-direction:column;gap:3px;}
+  .controls label{font-size:11px;color:var(--ink-muted);}
+  select{font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;border:1px solid var(--line-strong);padding:6px 9px;background:#fff;color:var(--ink);max-width:300px;}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px;}
+  @media(max-width:860px){.kpis{grid-template-columns:repeat(2,1fr);}}
+  @media(max-width:500px){.kpis{grid-template-columns:1fr;}}
+  .kpi .label{font-size:11.5px;color:var(--ink-muted);}
+  .kpi .value{font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:600;margin-top:3px;}
+  .kpi .note{font-size:11.5px;color:var(--ink-muted);margin-top:4px;}
+
+  /* ---- tabla ---- */
+  .tablewrap{overflow:auto;max-height:calc(100vh - 300px);min-height:220px;}
+  table.lista{border-collapse:separate;border-spacing:0;font-size:12px;width:max-content;min-width:100%;}
+  table.lista th, table.lista td{text-align:left;padding:5px 9px;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:top;}
+  table.lista thead th{font-family:'Space Grotesk',sans-serif;font-size:11px;font-weight:600;color:var(--ink-muted);
+    background:var(--panel);position:sticky;top:0;z-index:2;border-bottom:1px solid var(--line-strong);}
+  table.lista tbody tr:hover td{background:#F7F9F8;}
+  td.ot{font-family:'IBM Plex Mono',monospace;font-weight:600;}
+  td.ancho{white-space:normal;min-width:240px;max-width:380px;}
+  .pill{display:inline-block;font-size:10px;font-family:'IBM Plex Mono',monospace;padding:1px 7px;border:1px solid var(--line-strong);}
+  .pill.obra{background:var(--sage-soft);border-color:var(--sage);color:#28503F;}
+  .pill.servicio{background:var(--steel-soft);border-color:var(--steel);color:#1E4357;}
+  .vacio{color:var(--line-strong);}
+  .callout{border-left:3px solid var(--amber);background:var(--amber-soft);padding:9px 12px;font-size:12px;margin-top:10px;}
+  .nota{font-size:11.5px;color:var(--ink-muted);margin-top:10px;}
+  #errorApp{color:var(--ember);font-size:12.5px;margin:0 0 10px;}
+  .mono{font-family:'IBM Plex Mono',monospace;font-size:11.5px;}
+
+  @media print{
+    @page{size:landscape;margin:10mm;}
+    body{background:#fff;font-size:11px;}
+    .topbar button, .controls, #gate{display:none !important;}
+    .tablewrap{overflow:visible;max-height:none;}
+    table.lista thead th{position:static;}
+  }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <div class="panel">
+    <h1>Consulta de OT</h1>
+    <p>Acceso restringido — listado de órdenes de trabajo de obra y de servicio. No incluye montos ni información financiera.</p>
+    <div class="row">
+      <input type="password" id="pin" placeholder="PIN" autocomplete="off">
+      <button class="primary" id="btnEntrar">Entrar</button>
+    </div>
+    <div id="gateMsg"></div>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <div class="topbar"><div class="topbar-inner">
+    <h1>Consulta de OT</h1>
+    <span class="sub"><span id="meta">—</span>
+      <button class="ghost" id="btnRefrescar">↻ actualizar</button>
+      <button class="ghost" id="btnCsv">⬇ CSV</button>
+      <button class="ghost" id="btnLimpiar">limpiar filtros</button>
+      <button class="ghost" id="btnSalir">salir</button></span>
+  </div></div>
+  <main>
+    <div id="errorApp" hidden></div>
+
+    <div class="controls">
+      <div class="field"><label>Tipo</label><select id="fTipo">
+        <option value="">Obras y servicios</option>
+        <option value="Obra">Sólo obras</option>
+        <option value="Servicio">Sólo servicios</option>
+      </select></div>
+      <div class="field"><label>Cliente</label><select id="fCliente"><option value="">Todos los clientes</option></select></div>
+      <div class="field"><label>Estado</label><select id="fEstado"><option value="">Todos</option></select></div>
+      <div class="field"><label>Buscar</label><input type="text" id="fTexto" placeholder="OT, cliente, descripción…" autocomplete="off"></div>
+    </div>
+
+    <div class="kpis">
+      <div class="panel kpi"><div class="label">OT en pantalla</div><div class="value" id="kpiTotal">—</div><div class="note" id="kpiTotalNota">Con los filtros aplicados.</div></div>
+      <div class="panel kpi"><div class="label">Obras</div><div class="value" id="kpiObras">—</div><div class="note">De <span class="mono">1_Obras</span>.</div></div>
+      <div class="panel kpi"><div class="label">Servicios</div><div class="value" id="kpiServ">—</div><div class="note">De <span class="mono">1_Clientes_Servicio</span>.</div></div>
+      <div class="panel kpi"><div class="label">Sin OT capturada</div><div class="value" id="kpiSinOT">—</div><div class="note">Aparecen igual, para que no se pierdan.</div></div>
+    </div>
+
+    <div class="panel">
+      <h3 class="panel-title" id="tituloTabla">Órdenes de trabajo</h3>
+      <div class="panel-sub" id="subTabla">Las columnas cambian según el tipo: filtra a obras o a servicios para ver todos los campos de ese tipo.</div>
+      <div class="tablewrap" id="tabla"></div>
+      <div class="nota" id="notaColumnas"></div>
+      <div class="callout">Esta vista no trae montos, condiciones de pago ni teléfonos: esos campos no salen del servidor, así que no hay forma de verlos desde aquí. Si un dato se ve vacío, es que no está capturado en la hoja de origen — corrígelo ahí y se acomoda en la siguiente actualización.</div>
+    </div>
+  </main>
+</div>
+
+<script>
+const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwD_qXXjYenWoe0DWpEG_EZbxOr5nunyy0yE0kgd14Yd7sGBPG_E_sfQVoDviUKZ4w/exec';
+const esc = (s) => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const $ = (id) => document.getElementById(id);
+
+let PIN = '', DATA = null;
+
+// Qué columnas se muestran según el tipo filtrado. Con los dos tipos juntos sólo se enseñan
+// las que ambos tienen: una tabla llena de huecos se lee peor que una corta.
+const COLUMNAS = {
+  '': [
+    {k:'ot', t:'O.T.'}, {k:'tipo', t:'Tipo'}, {k:'cliente', t:'Cliente'},
+    {k:'descripcion', t:'Obra / servicio', ancho:true}, {k:'ubicacion', t:'Ubicación', ancho:true}
+  ],
+  'Obra': [
+    {k:'ot', t:'O.T.'}, {k:'id', t:'ID Obra'}, {k:'cliente', t:'Cliente'},
+    {k:'descripcion', t:'Nombre de la obra', ancho:true}, {k:'contrato', t:'No. Contrato'},
+    {k:'estado', t:'Estado'}, {k:'fecha_inicio', t:'Inicio'},
+    {k:'fecha_fin_programada', t:'Fin programada'}, {k:'fecha_entrega_real', t:'Entrega real'},
+    {k:'lider', t:'Líder'}, {k:'residente', t:'Residente'}, {k:'controller', t:'Controller'},
+    {k:'ubicacion', t:'Ubicación', ancho:true}, {k:'observaciones', t:'Observaciones', ancho:true}
+  ],
+  'Servicio': [
+    {k:'ot', t:'O.T.'}, {k:'id', t:'ID Cliente'}, {k:'cliente', t:'Cliente'},
+    {k:'descripcion', t:'Servicio contratado', ancho:true}, {k:'frecuencia', t:'Frecuencia'},
+    {k:'proxima_cita', t:'Próxima cita'}, {k:'ubicacion', t:'Domicilio', ancho:true},
+    {k:'requiere_fotos', t:'Requiere fotos gabinetes'}
+  ]
+};
+
+async function cargar(pin){
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 20000);
+  try{
+    const r = await fetch(`${ENDPOINT}?vista=ot&pin=${encodeURIComponent(pin)}`, {signal: ctrl.signal});
+    if(!r.ok) throw new Error('El servidor respondió con estado ' + r.status);
+    const data = await r.json();
+    if(data.error) throw new Error(data.error);
+    return data;
+  }catch(err){
+    if(err.name === 'AbortError') throw new Error('Tiempo de espera agotado (20 s).');
+    throw err;
+  }finally{ clearTimeout(to); }
+}
+
+async function entrar(pin, silencioso){
+  if(!pin){ $('gateMsg').textContent = 'Ingresa el PIN.'; return; }
+  $('btnEntrar').disabled = true;
+  if(!silencioso) $('gateMsg').textContent = 'Verificando…';
+  try{
+    DATA = await cargar(pin);
+    PIN = pin;
+    try{ sessionStorage.setItem('ot_pin', pin); }catch(e){}
+    $('gate').hidden = true; $('app').hidden = false;
+    $('gateMsg').textContent = '';
+    iniciarControles();
+  }catch(err){
+    $('gateMsg').textContent = err.message;
+  }finally{ $('btnEntrar').disabled = false; }
+}
+
+async function refrescar(){
+  $('btnRefrescar').disabled = true;
+  try{
+    DATA = await cargar(PIN);
+    $('errorApp').hidden = true;
+    iniciarControles(true);
+  }catch(err){
+    $('errorApp').textContent = err.message;
+    $('errorApp').hidden = false;
+  }finally{ $('btnRefrescar').disabled = false; }
+}
+
+function salir(){
+  try{ sessionStorage.removeItem('ot_pin'); }catch(e){}
+  PIN = ''; DATA = null;
+  $('app').hidden = true; $('gate').hidden = false;
+  $('pin').value = ''; $('gateMsg').textContent = '';
+}
+
+function iniciarControles(conservarFiltros){
+  const tipoPrev = conservarFiltros ? $('fTipo').value : '';
+  const cliPrev = conservarFiltros ? $('fCliente').value : '';
+  const estPrev = conservarFiltros ? $('fEstado').value : '';
+
+  $('fCliente').innerHTML = '<option value="">Todos los clientes</option>' +
+    (DATA.clientes||[]).map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+
+  const estados = [...new Set((DATA.filas||[]).map(f => f.estado).filter(Boolean))].sort();
+  $('fEstado').innerHTML = '<option value="">Todos</option>' +
+    estados.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
+
+  $('fTipo').value = tipoPrev;
+  $('fCliente').value = cliPrev;
+  $('fEstado').value = estPrev;
+
+  const gen = DATA.generado ? new Date(DATA.generado) : null;
+  $('meta').textContent = gen
+    ? `${(DATA.filas||[]).length} OT · actualizado ${gen.toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'})}`
+    : `${(DATA.filas||[]).length} OT`;
+
+  render();
+}
+
+function filtrar(){
+  const tipo = $('fTipo').value;
+  const cliente = $('fCliente').value;
+  const estado = $('fEstado').value;
+  const texto = $('fTexto').value.trim().toLowerCase();
+  return (DATA.filas||[]).filter(f =>
+    (!tipo || f.tipo === tipo) &&
+    (!cliente || f.cliente === cliente) &&
+    (!estado || f.estado === estado) &&
+    (!texto || [f.ot,f.id,f.cliente,f.descripcion,f.ubicacion,f.contrato,f.lider,f.residente,f.observaciones]
+      .some(v => String(v==null?'':v).toLowerCase().includes(texto))));
+}
+
+function columnasActivas(){
+  const tipo = $('fTipo').value;
+  return COLUMNAS[tipo] || COLUMNAS[''];
+}
+
+function render(){
+  const filas = filtrar();
+  const cols = columnasActivas();
+  const tipo = $('fTipo').value;
+
+  $('kpiTotal').textContent = filas.length;
+  $('kpiObras').textContent = filas.filter(f => f.tipo === 'Obra').length;
+  $('kpiServ').textContent = filas.filter(f => f.tipo === 'Servicio').length;
+  $('kpiSinOT').textContent = filas.filter(f => !f.ot).length;
+  $('kpiTotalNota').textContent = filas.length === (DATA.filas||[]).length
+    ? 'Todo el catálogo, sin filtrar.' : `De ${(DATA.filas||[]).length} en total.`;
+
+  // El filtro de estado sólo tiene sentido para obras; se desactiva en lugar de mentir
+  const soloServicios = tipo === 'Servicio';
+  $('fEstado').disabled = soloServicios;
+  $('fEstado').title = soloServicios ? 'Las OT de servicio no tienen estado capturado' : '';
+
+  $('notaColumnas').innerHTML = tipo
+    ? `Mostrando las columnas propias de <b>${esc(tipo === 'Obra' ? 'obras' : 'servicios')}</b>.`
+    : 'Mostrando sólo las columnas que obras y servicios tienen en común. Filtra por tipo para ver el resto.';
+
+  if(!filas.length){
+    $('tabla').innerHTML = '<p style="font-size:12.5px;color:var(--ink-muted);padding:10px 2px;">Ninguna OT coincide con los filtros.</p>';
+    return;
+  }
+
+  const celda = (f, c) => {
+    if(c.k === 'tipo') return `<span class="pill ${f.tipo === 'Obra' ? 'obra' : 'servicio'}">${esc(f.tipo)}</span>`;
+    const v = f[c.k];
+    if(v === null || v === undefined || v === ''){
+      return c.k === 'ot' ? '<span class="vacio">sin OT</span>' : '<span class="vacio">—</span>';
+    }
+    return esc(v);
+  };
+  const clase = (c) => [c.k === 'ot' ? 'ot' : '', c.ancho ? 'ancho' : ''].filter(Boolean).join(' ');
+
+  $('tabla').innerHTML = `<table class="lista">
+    <thead><tr>${cols.map(c => `<th>${esc(c.t)}</th>`).join('')}</tr></thead>
+    <tbody>${filas.map(f => `<tr>${cols.map(c =>
+      `<td class="${clase(c)}">${celda(f, c)}</td>`
+    ).join('')}</tr>`).join('')}</tbody>
+  </table>`;
+}
+
+// El CSV baja exactamente lo que está en pantalla: mismos filtros, mismas columnas.
+function exportarCsv(){
+  const filas = filtrar();
+  if(!filas.length) return;
+  const cols = columnasActivas();
+  const q = (v) => {
+    const s = String(v == null ? '' : v);
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  };
+  const cuerpo = filas.map(f => cols.map(c => q(f[c.k])));
+  const csv = '﻿' + [cols.map(c => q(c.t)), ...cuerpo].map(f => f.join(',')).join('\r\n');
+
+  const partes = ['OT'];
+  if($('fTipo').value) partes.push($('fTipo').value);
+  if($('fCliente').value) partes.push($('fCliente').value.replace(/[^\wÁÉÍÓÚÑáéíóúñ ]+/g,'').trim().replace(/\s+/g,'-'));
+  partes.push(new Date().toISOString().slice(0,10));
+
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+  a.download = partes.join('_') + '.csv';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
+
+function limpiarFiltros(){
+  $('fTipo').value = ''; $('fCliente').value = ''; $('fEstado').value = ''; $('fTexto').value = '';
+  render();
+}
+
+$('btnEntrar').addEventListener('click', () => entrar($('pin').value.trim()));
+$('pin').addEventListener('keydown', (e) => { if(e.key === 'Enter') entrar($('pin').value.trim()); });
+$('btnRefrescar').addEventListener('click', refrescar);
+$('btnCsv').addEventListener('click', exportarCsv);
+$('btnLimpiar').addEventListener('click', limpiarFiltros);
+$('btnSalir').addEventListener('click', salir);
+['fTipo','fCliente','fEstado'].forEach(id => $(id).addEventListener('change', render));
+$('fTexto').addEventListener('input', render);
+
+// Si ya se entró en esta pestaña, no se vuelve a pedir el PIN al recargar.
+(function(){
+  let guardado = ''; try{ guardado = sessionStorage.getItem('ot_pin') || ''; }catch(e){}
+  if(guardado) entrar(guardado, true);
+})();
+</script>
+
+</body>
+</html>
