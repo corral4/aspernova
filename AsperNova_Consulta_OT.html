@@ -115,7 +115,8 @@
       <div class="field"><label>Tipo</label><select id="fTipo">
         <option value="">Obras y servicios</option>
         <option value="Obra">Sólo obras</option>
-        <option value="Servicio">Sólo servicios</option>
+        <option value="Preventivo">Sólo preventivos</option>
+        <option value="Correctivo">Sólo correctivos</option>
       </select></div>
       <div class="field"><label>Cliente</label><select id="fCliente"><option value="">Todos los clientes</option></select></div>
       <div class="field"><label>Estado</label><select id="fEstado"><option value="">Todos</option></select></div>
@@ -125,16 +126,18 @@
     <div class="kpis">
       <div class="panel kpi"><div class="label">OT en pantalla</div><div class="value" id="kpiTotal">—</div><div class="note" id="kpiTotalNota">Con los filtros aplicados.</div></div>
       <div class="panel kpi"><div class="label">Obras</div><div class="value" id="kpiObras">—</div><div class="note">De <span class="mono">1_Obras</span>.</div></div>
-      <div class="panel kpi"><div class="label">Servicios</div><div class="value" id="kpiServ">—</div><div class="note">De <span class="mono">1_Clientes_Servicio</span>.</div></div>
-      <div class="panel kpi"><div class="label">Sin OT capturada</div><div class="value" id="kpiSinOT">—</div><div class="note">Aparecen igual, para que no se pierdan.</div></div>
+      <div class="panel kpi"><div class="label">Preventivos</div><div class="value" id="kpiPrev">—</div><div class="note">Pólizas, de <span class="mono">1_Clientes_Servicio</span>.</div></div>
+      <div class="panel kpi"><div class="label">Correctivos</div><div class="value" id="kpiCorr">—</div><div class="note">De <span class="mono">1_Cotizaciones</span>, con OT asignada.</div></div>
     </div>
+
+    <div id="avisoFuentes"></div>
 
     <div class="panel">
       <h3 class="panel-title" id="tituloTabla">Órdenes de trabajo</h3>
-      <div class="panel-sub" id="subTabla">Las columnas cambian según el tipo: filtra a obras o a servicios para ver todos los campos de ese tipo.</div>
+      <div class="panel-sub" id="subTabla">Las columnas cambian según el tipo: filtra a obras, preventivos o correctivos para ver todos los campos de ese tipo.</div>
       <div class="tablewrap" id="tabla"></div>
       <div class="nota" id="notaColumnas"></div>
-      <div class="callout">Esta vista no trae montos, condiciones de pago ni teléfonos: esos campos no salen del servidor, así que no hay forma de verlos desde aquí. Si un dato se ve vacío, es que no está capturado en la hoja de origen — corrígelo ahí y se acomoda en la siguiente actualización.</div>
+      <div class="callout">Esta vista no trae montos, costos, márgenes ni teléfonos, ni la liga al PDF de las cotizaciones: esos campos no salen del servidor, así que no hay forma de verlos desde aquí. Si un dato se ve vacío, es que no está capturado en la hoja de origen — corrígelo ahí y se acomoda en la siguiente actualización.</div>
     </div>
   </main>
 </div>
@@ -161,11 +164,20 @@ const COLUMNAS = {
     {k:'lider', t:'Líder'}, {k:'residente', t:'Residente'}, {k:'controller', t:'Controller'},
     {k:'ubicacion', t:'Ubicación', ancho:true}, {k:'observaciones', t:'Observaciones', ancho:true}
   ],
-  'Servicio': [
+  'Preventivo': [
     {k:'ot', t:'O.T.'}, {k:'id', t:'ID Cliente'}, {k:'cliente', t:'Cliente'},
     {k:'descripcion', t:'Servicio contratado', ancho:true}, {k:'frecuencia', t:'Frecuencia'},
     {k:'proxima_cita', t:'Próxima cita'}, {k:'ubicacion', t:'Domicilio', ancho:true},
     {k:'requiere_fotos', t:'Requiere fotos gabinetes'}
+  ],
+  'Correctivo': [
+    {k:'ot', t:'O.T.'}, {k:'folio', t:'Folio'}, {k:'cliente', t:'Cliente'},
+    {k:'descripcion', t:'Proyecto', ancho:true}, {k:'estado', t:'Estatus'},
+    {k:'tipo_mantenimiento', t:'Tipo mantenimiento'},
+    {k:'fecha_cotizacion', t:'Cotizada'}, {k:'fecha_inicio', t:'Inicio real'},
+    {k:'fecha_fin_programada', t:'Entrega'}, {k:'dias_estimados', t:'Días est.'},
+    {k:'foranea', t:'Foránea'}, {k:'responsable', t:'Responsable'},
+    {k:'id', t:'ID Cotización'}, {k:'observaciones', t:'Comentarios', ancho:true}
   ]
 };
 
@@ -177,6 +189,13 @@ async function cargar(pin){
     if(!r.ok) throw new Error('El servidor respondió con estado ' + r.status);
     const data = await r.json();
     if(data.error) throw new Error(data.error);
+    // Si el /exec todavía corre una versión que no conoce ?vista=ot, ignora el parámetro y
+    // responde el JSON general del tablero: la página entraría con cualquier PIN y con los
+    // montos ya descargados en el navegador. Se rechaza aquí, sin pintar nada.
+    if(!Array.isArray(data.filas)){
+      throw new Error('El servidor no respondió el catálogo de OT. Falta publicar una versión nueva '
+        + 'de la implementación del Apps Script (la actual todavía no conoce esta vista).');
+    }
     return data;
   }catch(err){
     if(err.name === 'AbortError') throw new Error('Tiempo de espera agotado (20 s).');
@@ -235,6 +254,18 @@ function iniciarControles(conservarFiltros){
   $('fCliente').value = cliPrev;
   $('fEstado').value = estPrev;
 
+  // Si una fuente no se pudo leer, se dice en pantalla. Un archivo sin compartir produce
+  // exactamente el mismo cuadro que "no hay de esos", y esa confusión ya costó una vuelta.
+  const f = DATA.fuentes || {};
+  const caidas = [];
+  if(f.preventivos === 'sin_acceso') caidas.push('el padrón de pólizas (<span class="mono">1_Clientes_Servicio</span>), así que faltan los <b>preventivos</b>');
+  if(f.correctivos === 'sin_acceso') caidas.push('el archivo de cotizaciones (<span class="mono">1_Cotizaciones</span>), así que faltan los <b>correctivos</b>');
+  $('avisoFuentes').innerHTML = caidas.length
+    ? `<div class="callout" style="border-left-color:var(--ember);background:var(--ember-soft);margin:0 0 12px;">
+         <b>Este listado está incompleto.</b> Al generarlo no se pudo leer ${caidas.join(', ni ')}.
+         Casi siempre es que el archivo no está compartido con la cuenta que corre el script.</div>`
+    : '';
+
   const gen = DATA.generado ? new Date(DATA.generado) : null;
   $('meta').textContent = gen
     ? `${(DATA.filas||[]).length} OT · actualizado ${gen.toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'})}`
@@ -268,19 +299,25 @@ function render(){
 
   $('kpiTotal').textContent = filas.length;
   $('kpiObras').textContent = filas.filter(f => f.tipo === 'Obra').length;
-  $('kpiServ').textContent = filas.filter(f => f.tipo === 'Servicio').length;
-  $('kpiSinOT').textContent = filas.filter(f => !f.ot).length;
-  $('kpiTotalNota').textContent = filas.length === (DATA.filas||[]).length
+  $('kpiPrev').textContent = filas.filter(f => f.tipo === 'Preventivo').length;
+  $('kpiCorr').textContent = filas.filter(f => f.tipo === 'Correctivo').length;
+  // "Sin OT" ya no tiene tarjeta propia (el lugar se lo quedaron los correctivos), pero el
+  // dato no se pierde: va de nota aquí, porque son los renglones que hay que ir a capturar.
+  const sinOt = filas.filter(f => !f.ot).length;
+  const base = filas.length === (DATA.filas||[]).length
     ? 'Todo el catálogo, sin filtrar.' : `De ${(DATA.filas||[]).length} en total.`;
+  $('kpiTotalNota').textContent = sinOt
+    ? `${base} ${sinOt} sin OT capturada.` : base;
 
   // El filtro de estado sólo tiene sentido para obras; se desactiva en lugar de mentir
-  const soloServicios = tipo === 'Servicio';
-  $('fEstado').disabled = soloServicios;
-  $('fEstado').title = soloServicios ? 'Las OT de servicio no tienen estado capturado' : '';
+  const sinEstado = tipo === 'Preventivo';
+  $('fEstado').disabled = sinEstado;
+  $('fEstado').title = sinEstado ? 'Las pólizas de preventivo no llevan estatus capturado' : '';
 
+  const plural = {'Obra':'obras','Preventivo':'preventivos','Correctivo':'correctivos'};
   $('notaColumnas').innerHTML = tipo
-    ? `Mostrando las columnas propias de <b>${esc(tipo === 'Obra' ? 'obras' : 'servicios')}</b>.`
-    : 'Mostrando sólo las columnas que obras y servicios tienen en común. Filtra por tipo para ver el resto.';
+    ? `Mostrando las columnas propias de <b>${esc(plural[tipo] || tipo)}</b>.`
+    : 'Mostrando sólo las columnas que los tres tipos tienen en común. Filtra por tipo para ver el resto.';
 
   if(!filas.length){
     $('tabla').innerHTML = '<p style="font-size:12.5px;color:var(--ink-muted);padding:10px 2px;">Ninguna OT coincide con los filtros.</p>';
