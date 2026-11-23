@@ -270,8 +270,14 @@ function pintarMarcoMateriales(){
       </div>
       <div id="resumenMat"></div>
       <div class="scrolltabla" id="tablaMat"></div>
-      <div class="callout">Cantidades tal como se capturaron en los avances diarios. <b>No se muestra unidad</b> a propósito: la hoja de avances no la trae, y la del catálogo es la del concepto, que no siempre coincide con la del material. Historial disponible desde ${fechaLarga(MAT.desde)}.</div>
+      <div class="callout">Cantidades y unidades tal como se capturaron en los avances diarios. La unidad es la del <b>material</b>, no la del concepto cotizado: son escalas distintas y mezclarlas infla los números. Un material capturado en dos unidades sale en dos renglones, porque no se pueden sumar entre sí. Historial disponible desde ${fechaLarga(MAT.desde)}.</div>
     </div>`;
+}
+
+// Una unidad vacía se marca, no se deja en blanco: mientras la columna se llena hacia atrás
+// va a haber renglones viejos sin ella, y una celda vacía parece un error de la página.
+function celdaUnidad(u){
+  return u ? esc(u) : '<span style="color:var(--line-strong);">sin unidad</span>';
 }
 
 // Devuelve las filas que pasan los filtros, ya sea en detalle o agrupadas por material.
@@ -290,17 +296,20 @@ function filtrarMateriales(){
 
   if(vista === 'detalle') return {vista, filas};
 
-  // Totales: por material, y por obra también cuando se ven todas, para no mezclar obras distintas
+  // Totales: por material y unidad, y por obra también cuando se ven todas, para no mezclar
+  // obras distintas. La unidad va en la llave porque sumar PZA con ML daría un número falso:
+  // si un material se capturó en dos unidades, sale en dos renglones.
   const porClave = new Map();
   filas.forEach(r => {
-    const clave = obra ? r.material : (r.nombre_obra + '||' + r.material);
-    if(!porClave.has(clave)) porClave.set(clave, {nombre_obra:r.nombre_obra, material:r.material, cantidad:0, dias:new Set()});
+    const u = r.unidad || '';
+    const clave = (obra ? '' : r.nombre_obra + '||') + r.material + '||' + u;
+    if(!porClave.has(clave)) porClave.set(clave, {nombre_obra:r.nombre_obra, material:r.material, unidad:r.unidad||null, cantidad:0, dias:new Set()});
     const x = porClave.get(clave);
     x.cantidad += r.cantidad;
     x.dias.add(r.fecha);
   });
   const totales = [...porClave.values()]
-    .map(x => ({nombre_obra:x.nombre_obra, material:x.material, cantidad:Math.round(x.cantidad*100)/100, dias:x.dias.size}))
+    .map(x => ({nombre_obra:x.nombre_obra, material:x.material, unidad:x.unidad, cantidad:Math.round(x.cantidad*100)/100, dias:x.dias.size}))
     .sort((a,b)=> b.cantidad - a.cantidad);
   return {vista, filas: totales, mostrarObra: !obra};
 }
@@ -308,7 +317,14 @@ function filtrarMateriales(){
 function renderMateriales(){
   if(!MAT) return;
   const {vista, filas, mostrarObra} = filtrarMateriales();
+  // La cantidad total sólo se puede sumar si todo lo que está en pantalla comparte unidad.
+  // Sumar piezas con metros lineales daría un número sin significado, así que en ese caso
+  // no se muestra un total: se dice cuántas unidades distintas hay.
+  const unidades = [...new Set(filas.map(r => r.unidad || ''))];
   const total = filas.reduce((s,r)=>s+r.cantidad,0);
+  const totalTxt = unidades.length <= 1
+    ? `cantidad total ${fmtCant.format(total)}${unidades[0] ? ' ' + esc(unidades[0]) : ''}`
+    : `${unidades.length} unidades distintas — no se suman entre sí`;
 
   // Con varias obras a la vista un material aparece una vez por obra, así que contarlos como
   // "materiales distintos" mentiría: se cuentan aparte.
@@ -317,19 +333,23 @@ function renderMateriales(){
     ? `${filas.length} renglón(es) · ${distintos} material(es) distintos`
     : (mostrarObra ? `${filas.length} combinación(es) obra-material · ${distintos} material(es) distintos`
                    : `${filas.length} material(es)`);
+  const sinU = filas.filter(r => !r.unidad).length;
+  const avisoU = sinU
+    ? ` · <span title="Se captura en 3_Avances_Diarios, en la columna Unidad de Medida">${sinU} sin unidad capturada</span>`
+    : '';
   document.getElementById('resumenMat').innerHTML =
-    `<div style="font-size:12px;color:var(--ink-muted);margin-bottom:8px;">${detalleTxt} · cantidad total ${fmtCant.format(total)}</div>`;
+    `<div style="font-size:12px;color:var(--ink-muted);margin-bottom:8px;">${detalleTxt} · ${totalTxt}${avisoU}</div>`;
 
   let html;
   if(!filas.length){
     html = '<div class="callout" style="margin-top:0;">Sin material capturado con estos filtros.</div>';
   } else if(vista === 'detalle'){
-    html = `<table class="lista"><thead><tr><th>Fecha</th><th>Obra</th><th>Material</th><th class="num">Cantidad</th></tr></thead><tbody>${
-      filas.map(r=>`<tr><td class="mono">${r.fecha}</td><td>${esc(r.nombre_obra)}</td><td>${esc(r.material)}</td><td class="num">${fmtCant.format(r.cantidad)}</td></tr>`).join('')
+    html = `<table class="lista"><thead><tr><th>Fecha</th><th>Obra</th><th>Material</th><th class="num">Cantidad</th><th>Unidad</th></tr></thead><tbody>${
+      filas.map(r=>`<tr><td class="mono">${r.fecha}</td><td>${esc(r.nombre_obra)}</td><td>${esc(r.material)}</td><td class="num">${fmtCant.format(r.cantidad)}</td><td>${celdaUnidad(r.unidad)}</td></tr>`).join('')
     }</tbody></table>`;
   } else {
-    html = `<table class="lista"><thead><tr>${mostrarObra?'<th>Obra</th>':''}<th>Material</th><th class="num">Cantidad</th><th class="num">Días con registro</th></tr></thead><tbody>${
-      filas.map(r=>`<tr>${mostrarObra?`<td>${esc(r.nombre_obra)}</td>`:''}<td>${esc(r.material)}</td><td class="num">${fmtCant.format(r.cantidad)}</td><td class="num">${r.dias}</td></tr>`).join('')
+    html = `<table class="lista"><thead><tr>${mostrarObra?'<th>Obra</th>':''}<th>Material</th><th class="num">Cantidad</th><th>Unidad</th><th class="num">Días con registro</th></tr></thead><tbody>${
+      filas.map(r=>`<tr>${mostrarObra?`<td>${esc(r.nombre_obra)}</td>`:''}<td>${esc(r.material)}</td><td class="num">${fmtCant.format(r.cantidad)}</td><td>${celdaUnidad(r.unidad)}</td><td class="num">${r.dias}</td></tr>`).join('')
     }</tbody></table>`;
   }
   document.getElementById('tablaMat').innerHTML = html;
@@ -348,11 +368,11 @@ function exportarCsvMateriales(){
   if(!filas.length) return;
   const q = v => { v = String(v==null?'':v); return /[",\r\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; };
   const cab = vista==='detalle'
-    ? ['Fecha','Obra','Material','Cantidad']
-    : (mostrarObra?['Obra']:[]).concat(['Material','Cantidad','Dias con registro']);
+    ? ['Fecha','Obra','Material','Cantidad','Unidad de Medida']
+    : (mostrarObra?['Obra']:[]).concat(['Material','Cantidad','Unidad de Medida','Dias con registro']);
   const cuerpo = filas.map(r => vista==='detalle'
-    ? [r.fecha,r.nombre_obra,r.material,r.cantidad]
-    : (mostrarObra?[r.nombre_obra]:[]).concat([r.material,r.cantidad,r.dias]));
+    ? [r.fecha,r.nombre_obra,r.material,r.cantidad,r.unidad||'']
+    : (mostrarObra?[r.nombre_obra]:[]).concat([r.material,r.cantidad,r.unidad||'',r.dias]));
   const csv = '\uFEFF' + [cab,...cuerpo].map(f=>f.map(q).join(',')).join('\r\n');
   const obra = document.getElementById('filtroObraMat');
   const partes = ['materiales', vista,
